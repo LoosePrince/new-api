@@ -102,6 +102,7 @@ type GroupRatioVisualEditorProps = {
   autoGroups: string
   maxTokenAutoGroupsField: ReactNode
   groupSpecialUsableGroup: string
+  groupPoliciesField?: ReactNode
   onChange: (field: string, value: string) => void
 }
 
@@ -277,6 +278,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
   autoGroups,
   maxTokenAutoGroupsField,
   groupSpecialUsableGroup,
+  groupPoliciesField,
   onChange,
 }: GroupRatioVisualEditorProps) {
   const { t, i18n } = useTranslation()
@@ -366,13 +368,26 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
         </TabsList>
       </div>
       <TabsContent value='pricing' keepMounted>
-        <GroupPricingTable
-          groupRatio={groupRatio}
-          userUsableGroups={userUsableGroups}
-          topupGroupRatio={topupGroupRatio}
-          onChange={onChange}
-          onShowDetail={setDetailGroup}
-        />
+        <div className='space-y-4'>
+          <GroupPricingTable
+            groupRatio={groupRatio}
+            userUsableGroups={userUsableGroups}
+            topupGroupRatio={topupGroupRatio}
+            onChange={onChange}
+            onShowDetail={setDetailGroup}
+          />
+          <Card className={sectionCardClassName}>
+            <CardHeader className={sectionHeaderClassName}>
+              <CardTitle>{t('Relay access policies')}</CardTitle>
+              <CardDescription>
+                {t(
+                  'Endpoint aliases are access paths only; API-key group authorization remains authoritative.'
+                )}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>{groupPoliciesField}</CardContent>
+          </Card>
+        </div>
       </TabsContent>
       <TabsContent value='overrides' keepMounted>
         <GroupOverrideRules

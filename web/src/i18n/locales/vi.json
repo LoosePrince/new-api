@@ -7336,6 +7336,11 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Relay access policies": "Chính sách truy cập relay",
+    "Configure endpoint aliases, key requirements and model fallback per group.": "Cấu hình bí danh endpoint, yêu cầu khóa và chuyển model dự phòng theo từng nhóm.",
+    "Endpoint aliases are access paths only; API-key group authorization remains authoritative.": "Bí danh endpoint chỉ là đường dẫn truy cập; quyền nhóm của API key vẫn được ưu tiên.",
+    "Register new accounts as guests": "Đăng ký tài khoản mới dưới dạng khách",
+    "New password registrations will have profile-only access": "Tài khoản đăng ký bằng mật khẩu mới chỉ được truy cập hồ sơ và bảo mật"
   }
 }

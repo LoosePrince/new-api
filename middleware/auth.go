@@ -81,6 +81,10 @@ func authHelper(c *gin.Context, minRole int) {
 	if lookup != nil {
 		setAccessTokenContext(c, lookup)
 	}
+	if user.IsGuest && !guestCanUseRoute(c) {
+		abortWithWebMessage(c, http.StatusForbidden, "AUTH_GUEST_RESTRICTED", common.NewMessage("Guest accounts have limited access"))
+		return
+	}
 
 	// 管理/root 写操作审计兜底：内聚在鉴权链路里，保证任何经过 AdminAuth/RootAuth
 	// 的写接口都会自动留痕（无需在路由上单独挂审计中间件，避免漏挂）。
@@ -127,6 +131,30 @@ func TryUserAuth() func(c *gin.Context) {
 		}
 		c.Next()
 	}
+}
+
+func guestCanUsePath(path string) bool {
+	for _, prefix := range []string{
+		"/api/user/sessions",
+		"/api/user/passkey",
+		"/api/user/2fa",
+		"/api/user/oauth/bindings",
+		"/api/oauth/email/bind",
+		"/api/oauth/wechat/bind",
+		"/api/oauth/telegram/bind/start",
+	} {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+	return path == "/api/user/self" ||
+		path == "/api/user/setting" ||
+		path == "/api/verify/methods" ||
+		path == "/api/verify"
+}
+
+func guestCanUseRoute(c *gin.Context) bool {
+	return guestCanUsePath(c.FullPath())
 }
 
 func UserAuth() func(c *gin.Context) {
@@ -517,6 +545,11 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 			c.Abort()
 			return
 		}
+		if userCache.IsGuest {
+			common.ApiErrorStatus(c, http.StatusUnauthorized, errors.New(common.TranslateMessage(c, i18n.MsgTokenInvalid)))
+			c.Abort()
+			return
+		}
 
 		c.Set("id", token.UserId)
 		c.Set("token_id", token.Id)
@@ -549,6 +582,20 @@ func TokenAuth() func(c *gin.Context) {
 			xGoogKey := c.Request.Header.Get("x-goog-api-key")
 			if xGoogKey != "" {
 				c.Request.Header.Set("Authorization", "Bearer "+xGoogKey)
+			}
+		}
+		if value, exists := c.Get(string(constant.ContextKeyGroupPolicy)); exists {
+			if endpoint, ok := value.(GroupEndpointPolicy); ok && keylessEndpointConfigured(endpoint.Endpoint) {
+				keyless, err := trySetKeylessOwnerContext(c, endpoint.Endpoint)
+				if err != nil {
+					common.SysLog(common.LogText("keyless relay owner resolution failed: %s", err.Error()))
+					abortWithOpenAiMessage(c, http.StatusServiceUnavailable, "Keyless access is unavailable")
+					return
+				}
+				if keyless {
+					c.Next()
+					return
+				}
 			}
 		}
 		key := c.Request.Header.Get("Authorization")
@@ -611,6 +658,10 @@ func TokenAuth() func(c *gin.Context) {
 				common.TranslateMessage(c, i18n.MsgDatabaseError))
 			return
 		}
+		if userCache.IsGuest {
+			abortWithOpenAiMessage(c, http.StatusUnauthorized, common.TranslateMessage(c, i18n.MsgTokenInvalid))
+			return
+		}
 		userEnabled := userCache.Status == common.UserStatusEnabled
 		if !userEnabled {
 			abortWithOpenAiMessage(c, http.StatusForbidden, common.TranslateMessage(c, i18n.MsgAuthUserBanned))
@@ -635,6 +686,29 @@ func TokenAuth() func(c *gin.Context) {
 				}
 			}
 			userGroup = tokenGroup
+		}
+		if value, exists := c.Get(string(constant.ContextKeyGroupPolicy)); exists {
+			if endpoint, ok := value.(GroupEndpointPolicy); ok {
+				matchesEndpoint := ratio_setting.GroupEndpointMatches(userGroup, endpoint.Endpoint)
+				if tokenGroup == "auto" {
+					matchesEndpoint = false
+					autoGroups, autoGroupsErr := token.GetAutoGroups()
+					if autoGroupsErr != nil {
+						abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgAuthTokenGroupForbidden, map[string]any{"Group": tokenGroup}))
+						return
+					}
+					for _, autoGroup := range autoGroups {
+						if ratio_setting.GroupEndpointMatches(autoGroup, endpoint.Endpoint) {
+							matchesEndpoint = true
+							break
+						}
+					}
+				}
+				if !matchesEndpoint {
+					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgAuthTokenGroupForbidden, map[string]any{"Group": userGroup}))
+					return
+				}
+			}
 		}
 		common.SetContextKey(c, constant.ContextKeyUsingGroup, userGroup)
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -22,6 +23,47 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestForcedFreeGroupRatioZeroesPreconsumeAndTieredSettlement(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	savedConfig := config.GlobalConfig.ExportAllConfigs()
+	savedRatios := ratio_setting.ModelRatio2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, config.GlobalConfig.LoadFromDB(savedConfig))
+		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(savedRatios))
+	})
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"forced-free-test-model":2}`))
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"billing_setting.billing_mode":    `{"forced-free-tiered-model":"tiered_expr"}`,
+		"billing_setting.billing_expr":    `{"forced-free-tiered-model":"tier(\"base\", p * 2 + c * 3)"}`,
+		"group_ratio_setting.group_ratio": `{"default":4}`,
+	}))
+
+	for _, modelName := range []string{"forced-free-test-model", "forced-free-tiered-model"} {
+		t.Run(modelName, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			common.SetContextKey(ctx, constant.ContextKeyForcedFree, true)
+			info := &relaycommon.RelayInfo{
+				OriginModelName: modelName,
+				UserGroup:       "default",
+				UsingGroup:      "default",
+				BillingRequestInput: &billingexpr.RequestInput{
+					Body: []byte(`{}`),
+				},
+			}
+			price, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
+			require.NoError(t, err)
+			assert.Zero(t, price.QuotaToPreConsume)
+			assert.Zero(t, price.GroupRatioInfo.GroupRatio)
+			if info.TieredBillingSnapshot != nil {
+				actual, err := billingexpr.ComputeTieredQuotaWithRequest(info.TieredBillingSnapshot, billingexpr.TokenParams{P: 1000, C: 500, Len: 1500}, *info.BillingRequestInput)
+				require.NoError(t, err)
+				assert.Zero(t, actual.ActualQuotaAfterGroup)
+			}
+		})
+	}
+}
 
 func TestModelPriceHelperTieredUsesPreloadedRequestInput(t *testing.T) {
 	gin.SetMode(gin.TestMode)

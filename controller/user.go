@@ -278,7 +278,8 @@ func Register(c *gin.Context) {
 		Password:    user.Password,
 		DisplayName: user.Username,
 		InviterId:   inviterId,
-		Role:        common.RoleCommonUser, // 明确设置角色为普通用户
+		Role:        common.RoleCommonUser,
+		IsGuest:     common.GuestRegistrationEnabled,
 	}
 	if common.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
@@ -299,7 +300,7 @@ func Register(c *gin.Context) {
 		return
 	}
 	// 生成默认令牌
-	if constant.GenerateDefaultToken {
+	if constant.GenerateDefaultToken && !cleanUser.IsGuest {
 		key, err := common.GenerateKey()
 		if err != nil {
 			common.ApiErrorT(c, "Failed to generate default token")

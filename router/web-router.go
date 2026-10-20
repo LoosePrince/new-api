@@ -23,6 +23,7 @@ func SetWebRouter(router *gin.Engine, assets WebAssets, pluginDispatcher gin.Han
 	compress := gzip.Gzip(gzip.DefaultCompression)
 
 	router.NoRoute(
+		middleware.GroupEndpointDispatcher(router),
 		pluginDispatcher,
 		middleware.RouteTag("web"),
 		func(c *gin.Context) {

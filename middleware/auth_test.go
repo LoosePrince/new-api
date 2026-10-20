@@ -12,10 +12,13 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
+	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/golang-jwt/jwt/v5"
@@ -33,7 +36,7 @@ func setupDashboardAuthMiddlewareTest(t *testing.T) {
 	previousSecret := common.SessionSecret
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.AuditLog{}, &model.UserAccessToken{}, &model.Option{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.UserSession{}, &model.AuditLog{}, &model.UserAccessToken{}, &model.Option{}))
 	model.DB = db
 	model.LOG_DB = db
 	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
@@ -111,6 +114,59 @@ func TestTokenAuthReadOnlyTranslatesErrors(t *testing.T) {
 		assert.True(t, c.IsAborted(), tc.acceptLanguage)
 		assert.Equal(t, http.StatusUnauthorized, recorder.Code, tc.acceptLanguage)
 		assert.JSONEq(t, `{"success":false,"message":"`+tc.want+`"}`, recorder.Body.String(), tc.acceptLanguage)
+	}
+}
+
+func TestGuestUserAuthRestrictsPATAndBusinessRoutes(t *testing.T) {
+	setupDashboardAuthMiddlewareTest(t)
+	gin.SetMode(gin.TestMode)
+	user := createMiddlewarePATUser(t, "guest-route-user", "guest-route-pat")
+	require.NoError(t, model.DB.Model(user).Update("is_guest", true).Error)
+
+	router := gin.New()
+	ok := func(c *gin.Context) { c.Status(http.StatusNoContent) }
+	router.GET("/api/user/self", UserAuth(), ok)
+	router.PUT("/api/user/setting", UserAuth(), ok)
+	router.GET("/api/user/self/access_tokens", UserAuth(), ok)
+	router.POST("/api/user/self/access_tokens", UserAuth(), ok)
+	router.GET("/api/token/", UserAuth(), ok)
+	router.POST("/api/token/", UserAuth(), ok)
+	router.GET("/api/log/self", UserAuth(), ok)
+	router.GET("/api/data/self", UserAuth(), ok)
+	router.GET("/api/task/self", UserAuth(), ok)
+	router.GET("/api/subscription/self", UserAuth(), ok)
+	router.POST("/api/user/topup", UserAuth(), ok)
+	router.GET("/api/user/sessions", UserAuth(), ok)
+	router.POST("/api/user/2fa/setup", UserAuth(), ok)
+
+	for _, test := range []struct {
+		method string
+		path   string
+		status int
+		code   string
+	}{
+		{method: http.MethodGet, path: "/api/user/self", status: http.StatusNoContent},
+		{method: http.MethodPut, path: "/api/user/setting", status: http.StatusNoContent},
+		{method: http.MethodPost, path: "/api/user/2fa/setup", status: http.StatusNoContent},
+		{method: http.MethodGet, path: "/api/user/self/access_tokens", status: http.StatusForbidden, code: "AUTH_GUEST_RESTRICTED"},
+		{method: http.MethodPost, path: "/api/user/self/access_tokens", status: http.StatusForbidden, code: "AUTH_GUEST_RESTRICTED"},
+		{method: http.MethodGet, path: "/api/token/", status: http.StatusForbidden, code: "AUTH_GUEST_RESTRICTED"},
+		{method: http.MethodPost, path: "/api/token/", status: http.StatusForbidden, code: "AUTH_GUEST_RESTRICTED"},
+		{method: http.MethodGet, path: "/api/log/self", status: http.StatusForbidden, code: "AUTH_GUEST_RESTRICTED"},
+		{method: http.MethodGet, path: "/api/data/self", status: http.StatusForbidden, code: "AUTH_GUEST_RESTRICTED"},
+		{method: http.MethodGet, path: "/api/task/self", status: http.StatusForbidden, code: "AUTH_GUEST_RESTRICTED"},
+		{method: http.MethodGet, path: "/api/subscription/self", status: http.StatusForbidden, code: "AUTH_GUEST_RESTRICTED"},
+		{method: http.MethodPost, path: "/api/user/topup", status: http.StatusForbidden, code: "AUTH_GUEST_RESTRICTED"},
+		{method: http.MethodGet, path: "/api/user/sessions", status: http.StatusForbidden, code: "AUTH_SESSION_REQUIRED"},
+	} {
+		request := httptest.NewRequest(test.method, test.path, nil)
+		request.Header.Set("Authorization", "Bearer guest-route-pat")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		assert.Equal(t, test.status, response.Code, test.path+": "+response.Body.String())
+		if test.code != "" {
+			assert.Contains(t, response.Body.String(), `"code":"`+test.code+`"`, test.path)
+		}
 	}
 }
 
@@ -533,4 +589,108 @@ func TestApplyWebSocketSubprotocolAuthorizationReadsRepeatedHeaders(t *testing.T
 
 	assert.True(t, applyWebSocketSubprotocolAuthorization(header))
 	assert.Equal(t, "Bearer sk-later-field", header.Get("Authorization"))
+}
+
+func TestGroupEndpointDispatcherMapsSharedAliasesToCanonicalRelayRoute(t *testing.T) {
+	previousPolicies := ratio_setting.GroupPolicies2JSONString()
+	t.Cleanup(func() { require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(previousPolicies)) })
+	require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(`{"root-a":{"endpoint":"/"},"root-b":{"endpoint":"/"},"custom-a":{"endpoint":"/api-prefix"},"custom-b":{"endpoint":"/api-prefix"}}`))
+
+	router := gin.New()
+	router.Use(GroupEndpoint())
+	router.POST("/v1/chat/completions", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"path": c.Request.URL.Path,
+		})
+	})
+	router.NoRoute(GroupEndpointDispatcher(router))
+
+	for _, path := range []string{"/v1/chat/completions", "/api-prefix/v1/chat/completions", "/api-prefix/chat/completions"} {
+		request := httptest.NewRequest(http.MethodPost, path, nil)
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		assert.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		assert.Contains(t, response.Body.String(), `"path":"/v1/chat/completions"`)
+	}
+}
+
+func TestTokenAuthKeylessEndpointUsesUniqueRootOwner(t *testing.T) {
+	setupDashboardAuthMiddlewareTest(t)
+	previousGroups := setting.UserUsableGroups2JSONString()
+	previousRatios := ratio_setting.GroupRatio2JSONString()
+	previousPolicies := ratio_setting.GroupPolicies2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(previousGroups))
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousRatios))
+		require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(previousPolicies))
+	})
+	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"default":"Default"}`))
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1}`))
+	require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(`{"default":{"endpoint":"/123","require_key":false}}`))
+	owner := &model.User{Username: "endpoint-owner", Password: "password-placeholder", Role: common.RoleRootUser, Status: common.UserStatusEnabled, Group: "default", AffCode: "endpoint-owner-aff"}
+	require.NoError(t, model.DB.Create(owner).Error)
+	assert.True(t, keylessEndpointConfigured("/123"))
+	var storedOwner model.User
+	require.NoError(t, model.DB.First(&storedOwner, owner.Id).Error)
+	assert.Equal(t, "default", storedOwner.Group)
+	policy, endpointMatches := ratio_setting.GroupPolicyForEndpoint(storedOwner.Group, "/123")
+	require.True(t, endpointMatches)
+	require.NotNil(t, policy.RequireKey)
+	assert.False(t, *policy.RequireKey)
+
+	router := gin.New()
+	router.Use(GroupEndpoint())
+	router.POST("/v1/chat/completions", TokenAuth(), func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"id":          c.GetInt("id"),
+			"token_id":    c.GetInt("token_id"),
+			"group":       common.GetContextKeyString(c, constant.ContextKeyUsingGroup),
+			"forced_free": common.GetContextKeyBool(c, constant.ContextKeyForcedFree),
+		})
+	})
+	router.NoRoute(GroupEndpointDispatcher(router))
+
+	for _, credential := range []string{"", "invalid-key", "endpoint-valid-key"} {
+		request := httptest.NewRequest(http.MethodPost, "/123/v1/chat/completions", nil)
+		if credential != "" {
+			request.Header.Set("Authorization", "Bearer "+credential)
+		}
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		assert.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		assert.Contains(t, response.Body.String(), fmt.Sprintf(`"id":%d`, owner.Id))
+		assert.Contains(t, response.Body.String(), `"token_id":0`)
+		assert.Contains(t, response.Body.String(), `"group":"default"`)
+		assert.Contains(t, response.Body.String(), `"forced_free":true`)
+	}
+}
+
+func TestTokenAuthKeylessEndpointFailsClosedWithoutUniqueOwner(t *testing.T) {
+	setupDashboardAuthMiddlewareTest(t)
+	previousPolicies := ratio_setting.GroupPolicies2JSONString()
+	t.Cleanup(func() { require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(previousPolicies)) })
+	require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(`{"default":{"endpoint":"/open","require_key":false}}`))
+
+	for _, owners := range [][]*model.User{
+		{},
+		{{Username: "owner-one", Password: "placeholder", Role: common.RoleRootUser, Status: common.UserStatusEnabled, Group: "default", AffCode: "owner-one-aff"},
+			{Username: "owner-two", Password: "placeholder", Role: common.RoleRootUser, Status: common.UserStatusEnabled, Group: "default", AffCode: "owner-two-aff"}},
+	} {
+		for _, owner := range owners {
+			require.NoError(t, model.DB.Create(owner).Error)
+		}
+		request := httptest.NewRequest(http.MethodPost, "/open/v1/chat/completions", nil)
+		response := httptest.NewRecorder()
+		ginRouter := gin.New()
+		ginRouter.Use(GroupEndpoint())
+		ginRouter.POST("/v1/chat/completions", TokenAuth(), func(c *gin.Context) { c.Status(http.StatusNoContent) })
+		ginRouter.NoRoute(GroupEndpointDispatcher(ginRouter))
+		ginRouter.ServeHTTP(response, request)
+		assert.Equal(t, http.StatusServiceUnavailable, response.Code)
+		assert.NotContains(t, response.Body.String(), "invalid")
+		if len(owners) == 0 {
+			continue
+		}
+		require.NoError(t, model.DB.Where("id IN ?", []int{owners[0].Id, owners[1].Id}).Delete(&model.User{}).Error)
+	}
 }

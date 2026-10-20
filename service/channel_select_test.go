@@ -183,3 +183,19 @@ func TestSharedType61IdentityFilterContainsAllCandidateKeys(t *testing.T) {
 	assert.Equal(t, []string{"alpha", "beta"}, filters[0].TaskPluginKeys)
 	assert.Empty(t, filters[0].TaskPluginChannelTypes)
 }
+
+func TestOrderGroupFallbackModels(t *testing.T) {
+	models := []string{"gpt-5", "gpt-4.1", "claude-sonnet-4"}
+
+	assert.Equal(t, []string{"claude-sonnet-4", "gpt-4.1", "gpt-5"}, orderGroupFallbackModels(models, "missing", "sequential"))
+	assert.Equal(t, []string{"gpt-4.1", "gpt-5", "claude-sonnet-4"}, orderGroupFallbackModels(models, "gpt-4.1x", "nearest"))
+
+	randomized := orderGroupFallbackModels(models, "missing", "random")
+	assert.ElementsMatch(t, models, randomized)
+}
+
+func TestModelNameDistance(t *testing.T) {
+	assert.Equal(t, 0, modelNameDistance("model", "model"))
+	assert.Equal(t, 1, modelNameDistance("model", "models"))
+	assert.Equal(t, 3, modelNameDistance("kitten", "sitting"))
+}

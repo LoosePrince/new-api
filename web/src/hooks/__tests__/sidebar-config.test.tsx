@@ -30,6 +30,7 @@ import { useAuthStore } from '@/stores/auth-store'
 
 import { useSidebarConfig } from '../use-sidebar-config'
 import { useSidebarData } from '../use-sidebar-data'
+import { filterGuestNavGroups } from '../use-sidebar-view'
 
 beforeEach(() => {
   vi.stubGlobal('localStorage', {
@@ -117,6 +118,29 @@ describe('security sidebar visibility', () => {
         .flatMap((group) => group.items)
         .some((item) => item.title === 'Security & Access')
     ).toBe(true)
+  })
+})
+
+describe('guest sidebar visibility', () => {
+  it('shows only profile and security for guest accounts', () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    useAuthStore.getState().auth.setUser({
+      id: 1,
+      username: 'guest',
+      role: 1,
+      is_guest: true,
+    })
+    const { result } = renderHook(() => useSidebarData(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    })
+    const items = filterGuestNavGroups(result.current.navGroups).flatMap(
+      (group) => group.items
+    )
+    expect(items.map((item) => item.url)).toEqual(['/profile', '/security'])
   })
 })
 

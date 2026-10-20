@@ -549,6 +549,9 @@ func getTaskOriginModelName(c *gin.Context) string {
 }
 
 func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, modelName string) *types.NewAPIError {
+	if routedModel := common.GetContextKeyString(c, constant.ContextKeyRoutedModel); routedModel != "" {
+		modelName = routedModel
+	}
 	c.Set("original_model", modelName) // for retry
 	expectedPlugin := c.GetString("expected_task_plugin_key")
 	if channel == nil {

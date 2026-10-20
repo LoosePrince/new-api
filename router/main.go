@@ -30,6 +30,7 @@ func SetRouter(router *gin.Engine, assets WebAssets) {
 	} else {
 		frontendBaseUrl = strings.TrimSuffix(frontendBaseUrl, "/")
 		router.NoRoute(
+			middleware.GroupEndpointDispatcher(router),
 			pluginDispatcher,
 			middleware.RouteTag("web"),
 			middleware.AccessTokenAudit(),

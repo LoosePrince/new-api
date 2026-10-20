@@ -7336,6 +7336,11 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Relay access policies": "Politiques d’accès du relais",
+    "Configure endpoint aliases, key requirements and model fallback per group.": "Configurez les alias de point de terminaison, les exigences de clé et le repli de modèle par groupe.",
+    "Endpoint aliases are access paths only; API-key group authorization remains authoritative.": "Les alias de point de terminaison sont uniquement des chemins d’accès ; l’autorisation de groupe de la clé API reste prioritaire.",
+    "Register new accounts as guests": "Inscrire les nouveaux comptes comme invités",
+    "New password registrations will have profile-only access": "Les nouvelles inscriptions par mot de passe auront uniquement accès au profil et à la sécurité"
   }
 }

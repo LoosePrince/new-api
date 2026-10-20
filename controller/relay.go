@@ -131,6 +131,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 
+	if routedModel := common.GetContextKeyString(c, constant.ContextKeyRoutedModel); routedModel != "" {
+		request.SetModelName(routedModel)
+	}
+
 	relayInfo, err := relaycommon.GenRelayInfo(c, relayFormat, request, ws)
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)

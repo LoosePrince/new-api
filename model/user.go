@@ -83,7 +83,8 @@ type User struct {
 	HasPassword          bool                       `json:"-" gorm:"-:all"`
 	OriginalPassword     string                     `json:"original_password" gorm:"-:all"` // this field is only for Password change verification, don't save it to database!
 	DisplayName          string                     `json:"display_name" gorm:"index" validate:"max=20"`
-	Role                 int                        `json:"role" gorm:"type:int;default:1"`   // admin, common
+	Role                 int                        `json:"role" gorm:"type:int;default:1"` // admin, common
+	IsGuest              bool                       `json:"is_guest" gorm:"not null;default:false"`
 	Status               int                        `json:"status" gorm:"type:int;default:1"` // enabled, disabled
 	Email                string                     `json:"email" gorm:"index" validate:"max=50"`
 	GitHubId             string                     `json:"github_id" gorm:"column:github_id;index"`
@@ -121,6 +122,7 @@ func (user *User) ToBaseUser() *UserBase {
 		Quota:       user.Quota,
 		Status:      user.Status,
 		Role:        user.Role,
+		IsGuest:     user.IsGuest,
 		Username:    user.Username,
 		Setting:     user.Setting,
 		Email:       user.Email,

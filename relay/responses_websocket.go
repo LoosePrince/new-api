@@ -109,14 +109,15 @@ type responsesWSSession struct {
 
 	// These fields belong to the serial request worker and describe the actual
 	// established connection. Per-request token/user data is never stored here.
-	lastResponseID  string
-	lockedModel     string
-	lockedChannelID int
-	lockedGroup     string
-	lockedKey       string
-	lockedKeyIndex  int
-	lockedContext   map[appconstant.ContextKey]any
-	lockedRoute     dto.AdvancedCustomRoute
+	lastResponseID    string
+	lockedModel       string
+	lockedRoutedModel string
+	lockedChannelID   int
+	lockedGroup       string
+	lockedKey         string
+	lockedKeyIndex    int
+	lockedContext     map[appconstant.ContextKey]any
+	lockedRoute       dto.AdvancedCustomRoute
 }
 
 func ResponsesWebSocketHelper(c *gin.Context, client *websocket.Conn, runner ResponsesWSRequestRunner) *types.NewAPIError {
@@ -236,7 +237,10 @@ func (s *responsesWSSession) runRequest(state *responsesWSCallState, message []b
 
 func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState, create responsesWSCreateRequest) (apiErr *types.NewAPIError) {
 	policy := service.RequestPolicy(c)
-	modelName := create.Request.Model
+	requestedModel := create.Request.Model
+	modelName := requestedModel
+	common.SetContextKey(c, appconstant.ContextKeyOriginalModel, modelName)
+	common.SetContextKey(c, appconstant.ContextKeyRoutedModel, "")
 	started := time.Now()
 	var info *relaycommon.RelayInfo
 	billingPrepared := false
@@ -259,7 +263,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 	if modelName == "" {
 		return newResponsesWSInvalidRequestError(errors.New("model is required"))
 	}
-	if s.lockedModel != "" && modelName != s.lockedModel {
+	if s.lockedModel != "" && requestedModel != s.lockedModel {
 		return newResponsesWSInvalidRequestError(fmt.Errorf("responses websocket connection is locked to model %q", s.lockedModel))
 	}
 	if apiErr = checkResponsesWSModelAccess(c, modelName); apiErr != nil {
@@ -270,9 +274,16 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 	service.GetChannelConstraints(c).AddFilter(appdto.ChannelFilter{Kind: appdto.FilterRequestPath, RequestPath: c.Request.URL.Path})
 
 	if s.lockedChannelID != 0 {
-		if apiErr = s.restoreConnectionContext(c, modelName); apiErr != nil {
+		lockedModel := s.lockedRoutedModel
+		if lockedModel == "" {
+			lockedModel = modelName
+		}
+		if apiErr = s.restoreConnectionContext(c, lockedModel); apiErr != nil {
 			return apiErr
 		}
+		create.Request.SetModelName(lockedModel)
+		common.SetContextKey(c, appconstant.ContextKeyOriginalModel, lockedModel)
+		common.SetContextKey(c, appconstant.ContextKeyRoutedModel, lockedModel)
 		info = relaycommon.GenRelayInfoResponses(c, &create.Request)
 		info.IsStream = true
 		common.SetContextKey(c, appconstant.ContextKeyIsStream, true)
@@ -294,6 +305,13 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 		for ; retry.GetRetry() <= common.RetryTimes; retry.IncreaseRetry() {
 			var channel *appmodel.Channel
 			channel, apiErr = selectResponsesWSChannel(c, modelName, retry)
+			if apiErr == nil {
+				if routedModel := common.GetContextKeyString(c, appconstant.ContextKeyRoutedModel); routedModel != "" {
+					modelName = routedModel
+					retry.ModelName = routedModel
+					create.Request.SetModelName(routedModel)
+				}
+			}
 			if apiErr != nil {
 				return apiErr
 			}
@@ -341,7 +359,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				state.closeCode = websocket.CloseInternalServerErr
 				return types.NewError(err, types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
 			}
-			s.lockedModel, s.lockedChannelID, s.lockedGroup = modelName, channel.Id, info.UsingGroup
+			s.lockedModel, s.lockedRoutedModel, s.lockedChannelID, s.lockedGroup = requestedModel, modelName, channel.Id, info.UsingGroup
 			s.lockedKey, s.lockedKeyIndex = info.ApiKey, info.ChannelMultiKeyIndex
 			s.lockedRoute, _ = channel.GetOtherSettings().AdvancedCustom.MatchPathForModel(c.Request.URL.Path, modelName)
 			s.lockedContext = make(map[appconstant.ContextKey]any)

@@ -27,6 +27,7 @@ func setupChannelSelectAutoGroupsTest(t *testing.T) *gorm.DB {
 	originalAutoGroups := setting.AutoGroups2JsonString()
 	originalUsableGroups := setting.UserUsableGroups2JSONString()
 	originalGroupRatios := ratio_setting.GroupRatio2JSONString()
+	originalGroupPolicies := ratio_setting.GroupPolicies2JSONString()
 	originalMaxTokenAutoGroups := setting.GetMaxTokenAutoGroups()
 
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
@@ -35,6 +36,7 @@ func setupChannelSelectAutoGroupsTest(t *testing.T) *gorm.DB {
 	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}))
 	model.DB = db
 	common.MemoryCacheEnabled = true
+	model.InitChannelCache()
 	common.RetryTimes = 0
 
 	require.NoError(t, setting.UpdateAutoGroupsByJsonString(`[]`))
@@ -49,6 +51,7 @@ func setupChannelSelectAutoGroupsTest(t *testing.T) *gorm.DB {
 		require.NoError(t, setting.UpdateAutoGroupsByJsonString(originalAutoGroups))
 		require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(originalUsableGroups))
 		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(originalGroupRatios))
+		require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(originalGroupPolicies))
 		require.NoError(t, setting.UpdateMaxTokenAutoGroups(fmt.Sprintf("%d", originalMaxTokenAutoGroups)))
 
 		if originalMemoryCacheEnabled && originalDB != nil &&
@@ -87,6 +90,93 @@ func createChannelSelectAutoGroupsChannel(t *testing.T, db *gorm.DB, id int, gro
 		Priority:  &priority,
 		Weight:    weight,
 	}).Error)
+}
+
+func TestSelectChannelForRequestUsesGroupModelFallbackStrategies(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		strategy string
+		model    string
+		want     string
+	}{
+		{name: "sequential", strategy: ratio_setting.AutoRouteSequential, model: "requested", want: "alpha-model"},
+		{name: "nearest", strategy: ratio_setting.AutoRouteNearest, model: "gpt-4.1x", want: "gpt-4.1"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			db := setupChannelSelectAutoGroupsTest(t)
+			models := []string{"alpha-model", "beta-model", "gpt-4.1", "gpt-4o"}
+			for i, modelName := range models {
+				createChannelSelectAutoGroupsChannel(t, db, 2200+i, "default", modelName)
+			}
+			require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(fmt.Sprintf(`{"default":{"auto_route":true,"route_strategy":%q}}`, test.strategy)))
+			model.InitChannelCache()
+
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			common.SetContextKey(ctx, constant.ContextKeyUsingGroup, "default")
+			selected, _, selectErr := SelectChannelForRequest(ctx, test.model, &RetryParam{
+				Ctx: ctx, TokenGroup: "default", ModelName: test.model, Retry: common.GetPointer(0),
+			})
+			require.Nil(t, selectErr)
+			require.NotNil(t, selected)
+			assert.Equal(t, test.want, selected.Models)
+			assert.Equal(t, test.want, common.GetContextKeyString(ctx, constant.ContextKeyRoutedModel))
+		})
+	}
+}
+
+func TestSelectChannelForRequestPrefersRequestedModelBeforeFallback(t *testing.T) {
+	db := setupChannelSelectAutoGroupsTest(t)
+	createChannelSelectAutoGroupsChannel(t, db, 2250, "default", "requested-model")
+	createChannelSelectAutoGroupsChannel(t, db, 2251, "default", "fallback-model")
+	require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(`{"default":{"auto_route":true,"route_strategy":"nearest"}}`))
+	model.InitChannelCache()
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	common.SetContextKey(ctx, constant.ContextKeyUsingGroup, "default")
+	selected, _, selectErr := SelectChannelForRequest(ctx, "requested-model", &RetryParam{
+		Ctx: ctx, TokenGroup: "default", ModelName: "requested-model", Retry: common.GetPointer(0),
+	})
+	require.Nil(t, selectErr)
+	require.NotNil(t, selected)
+	assert.Equal(t, "requested-model", selected.Models)
+	assert.Empty(t, common.GetContextKeyString(ctx, constant.ContextKeyRoutedModel))
+}
+
+func TestSelectChannelForRequestRandomFallbackChoosesEligibleModel(t *testing.T) {
+	db := setupChannelSelectAutoGroupsTest(t)
+	for i, modelName := range []string{"alpha-model", "beta-model"} {
+		createChannelSelectAutoGroupsChannel(t, db, 2300+i, "default", modelName)
+	}
+	require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(`{"default":{"auto_route":true,"route_strategy":"random"}}`))
+	model.InitChannelCache()
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	common.SetContextKey(ctx, constant.ContextKeyUsingGroup, "default")
+	selected, _, selectErr := SelectChannelForRequest(ctx, "missing-model", &RetryParam{
+		Ctx: ctx, TokenGroup: "default", ModelName: "missing-model", Retry: common.GetPointer(0),
+	})
+	require.Nil(t, selectErr)
+	require.NotNil(t, selected)
+	assert.Contains(t, []string{"alpha-model", "beta-model"}, selected.Models)
+}
+
+func TestSelectChannelForRequestUsesGroupFallbackForAllowedAutoGroup(t *testing.T) {
+	db := setupChannelSelectAutoGroupsTest(t)
+	createChannelSelectAutoGroupsChannel(t, db, 2401, "vip", "vip-model")
+	require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(`{"vip":{"auto_route":true,"route_strategy":"sequential"}}`))
+	model.InitChannelCache()
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
+	common.SetContextKey(ctx, constant.ContextKeyTokenAutoGroups, []string{"vip"})
+	selected, selectedGroup, selectErr := SelectChannelForRequest(ctx, "missing-model", &RetryParam{
+		Ctx: ctx, TokenGroup: "auto", ModelName: "missing-model", Retry: common.GetPointer(0),
+	})
+	require.Nil(t, selectErr)
+	require.NotNil(t, selected)
+	assert.Equal(t, 2401, selected.Id)
+	assert.Equal(t, "vip", selectedGroup)
+	assert.Equal(t, "vip", common.GetContextKeyString(ctx, constant.ContextKeyAutoGroup))
 }
 
 func TestCacheGetRandomSatisfiedChannelUsesTokenAutoGroupsWhenGlobalAutoIsEmpty(t *testing.T) {

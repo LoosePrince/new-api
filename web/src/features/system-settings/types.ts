@@ -161,6 +161,7 @@ export type AuthSettings = {
   PasswordRegisterEnabled: boolean
   EmailVerificationEnabled: boolean
   RegisterEnabled: boolean
+  GuestRegistrationEnabled: boolean
   EmailDomainRestrictionEnabled: boolean
   EmailAliasRestrictionEnabled: boolean
   EmailDomainWhitelist: string
@@ -262,6 +263,7 @@ export type ModelSettings = {
   GroupRatio: string
   UserUsableGroups: string
   GroupGroupRatio: string
+  GroupPolicies: string
   AutoGroups: string
   MaxTokenAutoGroups: number
   DefaultUseAutoGroup: boolean
@@ -302,6 +304,7 @@ export type BillingSettings = {
   GroupRatio: string
   UserUsableGroups: string
   GroupGroupRatio: string
+  GroupPolicies: string
   AutoGroups: string
   MaxTokenAutoGroups: number
   DefaultUseAutoGroup: boolean

@@ -31,6 +31,17 @@ import { useSidebarData } from './use-sidebar-data'
 /** Sentinel key used for the root navigation in animation `key=` props */
 const ROOT_VIEW_KEY = '__root'
 
+export function filterGuestNavGroups(navGroups: NavGroup[]): NavGroup[] {
+  return navGroups
+    .map((group) => {
+      const items = group.items.filter(
+        (item) => item.url === '/profile' || item.url === '/security'
+      )
+      return items.length === group.items.length ? group : { ...group, items }
+    })
+    .filter((group) => group.items.length > 0)
+}
+
 /**
  * Resolve the active sidebar view for the current location.
  *
@@ -48,10 +59,14 @@ export function useSidebarView(): ResolvedSidebarView {
   const { t } = useTranslation()
   const pathname = useLocation({ select: (l) => l.pathname })
   const userRole = useAuthStore((s) => s.auth.user?.role)
+  const isGuest = useAuthStore((s) => s.auth.user?.is_guest === true)
   const rootSidebarData = useSidebarData()
   const configFilteredRoot = useSidebarConfig(rootSidebarData.navGroups)
 
   const rootNavGroups = useMemo<NavGroup[]>(() => {
+    if (isGuest) {
+      return filterGuestNavGroups(configFilteredRoot)
+    }
     const role = userRole ?? ROLE.GUEST
     const isAdmin = role >= ROLE.ADMIN
     return configFilteredRoot
@@ -62,7 +77,8 @@ export function useSidebarView(): ResolvedSidebarView {
         )
         return items.length === group.items.length ? group : { ...group, items }
       })
-  }, [configFilteredRoot, userRole])
+      .filter((group) => group.items.length > 0)
+  }, [configFilteredRoot, isGuest, userRole])
 
   const view = resolveSidebarView(pathname)
 

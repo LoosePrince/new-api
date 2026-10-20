@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
@@ -59,6 +60,11 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) hostty
 	} else {
 		// normal group ratio
 		groupRatioInfo.GroupRatio = ratio_setting.GetGroupRatio(relayInfo.UsingGroup)
+	}
+	if common.GetContextKeyBool(ctx, constant.ContextKeyForcedFree) {
+		groupRatioInfo.GroupRatio = 0
+		groupRatioInfo.GroupSpecialRatio = 0
+		groupRatioInfo.HasSpecialRatio = false
 	}
 
 	return groupRatioInfo

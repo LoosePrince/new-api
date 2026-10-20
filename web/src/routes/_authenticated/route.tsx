@@ -38,6 +38,16 @@ export const Route = createFileRoute('/_authenticated')({
         search: { redirect: location.href },
       })
     }
+
+    if (
+      auth.user.is_guest &&
+      location.pathname !== '/profile' &&
+      !location.pathname.startsWith('/profile/') &&
+      location.pathname !== '/security' &&
+      !location.pathname.startsWith('/security/')
+    ) {
+      throw redirect({ to: '/profile' })
+    }
   },
   component: AuthenticatedLayout,
 })

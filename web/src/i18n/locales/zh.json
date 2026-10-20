@@ -7336,6 +7336,11 @@
     "Zhipu": "智谱",
     "Zhipu GLM": "智谱GLM",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Relay access policies": "中继访问策略",
+    "Configure endpoint aliases, key requirements and model fallback per group.": "按分组配置端点别名、密钥要求和模型回退。",
+    "Endpoint aliases are access paths only; API-key group authorization remains authoritative.": "端点别名仅作为访问路径，API 密钥的分组权限仍然有效。",
+    "Register new accounts as guests": "将新注册账户设为访客",
+    "New password registrations will have profile-only access": "新的密码注册账户仅可访问个人资料和安全功能"
   }
 }

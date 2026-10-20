@@ -8,6 +8,7 @@ const (
 	ContextKeyEstimatedTokens ContextKey = "estimated_tokens"
 
 	ContextKeyOriginalModel    ContextKey = "original_model"
+	ContextKeyRoutedModel      ContextKey = "routed_model"
 	ContextKeyRequestStartTime ContextKey = "request_start_time"
 
 	/* token related keys */
@@ -58,6 +59,9 @@ const (
 	ContextKeyUserGroup   ContextKey = "user_group"
 	ContextKeyUsingGroup  ContextKey = "group"
 	ContextKeyUserName    ContextKey = "username"
+	ContextKeyIsGuest     ContextKey = "is_guest"
+	ContextKeyForcedFree  ContextKey = "forced_free"
+	ContextKeyGroupPolicy ContextKey = "group_policy"
 
 	ContextKeyLocalCountTokens ContextKey = "local_count_tokens"
 

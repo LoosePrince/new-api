@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -13,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 )
 
@@ -278,9 +280,11 @@ type ChannelSelectError struct {
 // shared by the HTTP distributor and the Responses WebSocket relay: a pinned
 // channel wins, then session affinity (first attempt only), then a random
 // eligible channel; every candidate must satisfy the request's channel
-// filters. The group the channel was chosen from is returned for auto-group
-// callers. The caller still applies SetupContextForSelectedChannel.
+// filters. A configured group fallback runs only after the requested model has
+// no eligible channel. The selected group is returned for auto-group callers;
+// the caller still applies SetupContextForSelectedChannel.
 func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam) (*model.Channel, string, *ChannelSelectError) {
+	common.SetContextKey(c, constant.ContextKeyRoutedModel, "")
 	constraints := GetChannelConstraints(c)
 	if pin, found, overridden := constraints.ResolvedPin(); found {
 		for _, lost := range overridden {
@@ -360,11 +364,25 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 			}
 		}
 		if channel == nil {
-			return nil, selectGroup, &ChannelSelectError{
-				StatusCode: http.StatusServiceUnavailable, Code: types.ErrorCodeModelNotFound, MessageID: i18n.MsgDistributorNoAvailableChannel,
-				Params: map[string]any{"Group": usingGroup, "Model": modelName}, NoAvailableChannel: true,
+			if fallbackChannel, fallbackGroup, fallbackModel := selectGroupFallback(c, retry, modelName); fallbackChannel != nil {
+				channel = fallbackChannel
+				selectGroup = fallbackGroup
+				common.SetContextKey(c, constant.ContextKeyRoutedModel, fallbackModel)
+				if retry.TokenGroup == "auto" {
+					common.SetContextKey(c, constant.ContextKeyAutoGroup, fallbackGroup)
+				}
+			}
+			if channel == nil {
+				return nil, selectGroup, &ChannelSelectError{
+					StatusCode: http.StatusServiceUnavailable, Code: types.ErrorCodeModelNotFound, MessageID: i18n.MsgDistributorNoAvailableChannel,
+					Params: map[string]any{"Group": usingGroup, "Model": modelName}, NoAvailableChannel: true,
+				}
 			}
 		}
+	}
+	effectiveModel := common.GetContextKeyString(c, constant.ContextKeyRoutedModel)
+	if effectiveModel != "" {
+		modelName = effectiveModel
 	}
 	if ok, kind := model.ChannelSatisfiesFilters(channel, modelName, constraints.Filters); !ok {
 		return nil, selectGroup, &ChannelSelectError{
@@ -374,6 +392,113 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 		}
 	}
 	return channel, selectGroup, nil
+}
+
+func selectGroupFallback(c *gin.Context, retry *RetryParam, requestedModel string) (*model.Channel, string, string) {
+	if retry == nil || retry.TokenGroup == "" {
+		return nil, "", ""
+	}
+
+	groups := []string{retry.TokenGroup}
+	if retry.TokenGroup == "auto" {
+		groups = GetRequestAutoGroups(c, common.GetContextKeyString(c, constant.ContextKeyUserGroup))
+	}
+	for _, group := range groups {
+		policy := ratio_setting.GetGroupPolicy(group)
+		if !policy.AutoRoute {
+			continue
+		}
+		groupRetry := *retry
+		groupRetry.TokenGroup = group
+		channel, fallbackModel := selectGroupFallbackForGroup(c, &groupRetry, group, requestedModel, policy)
+		if channel != nil {
+			return channel, group, fallbackModel
+		}
+	}
+	return nil, "", ""
+}
+
+func selectGroupFallbackForGroup(c *gin.Context, retry *RetryParam, group, requestedModel string, policy ratio_setting.GroupPolicy) (*model.Channel, string) {
+	candidates := model.GetGroupEnabledModels(group)
+	filtered := candidates[:0]
+	modelLimitEnabled := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
+	var modelLimit map[string]bool
+	if modelLimitEnabled {
+		if value, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit); ok {
+			modelLimit, _ = value.(map[string]bool)
+		}
+		if modelLimit == nil {
+			return nil, ""
+		}
+	}
+	for _, candidate := range candidates {
+		if candidate == requestedModel || (modelLimitEnabled && !groupFallbackModelAllowed(modelLimit, candidate)) {
+			continue
+		}
+		filtered = append(filtered, candidate)
+	}
+	candidates = filtered
+	if len(candidates) == 0 {
+		return nil, ""
+	}
+
+	candidates = orderGroupFallbackModels(candidates, requestedModel, policy.RouteStrategy)
+
+	for _, candidate := range candidates {
+		channel, err := model.GetRandomSatisfiedChannel(group, candidate, retry.GetRetry(), GetChannelConstraints(c).Filters)
+		if err != nil || channel == nil || channel.Status != common.ChannelStatusEnabled {
+			continue
+		}
+		if ok, _ := model.ChannelSatisfiesFilters(channel, candidate, GetChannelConstraints(c).Filters); !ok {
+			continue
+		}
+		return channel, candidate
+	}
+	return nil, ""
+}
+
+func orderGroupFallbackModels(models []string, requestedModel, strategy string) []string {
+	ordered := append([]string(nil), models...)
+	sort.Strings(ordered)
+	switch strategy {
+	case ratio_setting.AutoRouteRandom:
+		start := common.GetRandomInt(len(ordered))
+		ordered = append(ordered[start:], ordered[:start]...)
+	case ratio_setting.AutoRouteNearest:
+		sort.SliceStable(ordered, func(i, j int) bool {
+			left, right := modelNameDistance(requestedModel, ordered[i]), modelNameDistance(requestedModel, ordered[j])
+			if left == right {
+				return ordered[i] < ordered[j]
+			}
+			return left < right
+		})
+	}
+	return ordered
+}
+
+func groupFallbackModelAllowed(limit map[string]bool, modelName string) bool {
+	return limit[modelName] || limit[ratio_setting.FormatMatchingModelName(modelName)] || limit[ratio_setting.RoutingMatchModelName(modelName)]
+}
+
+func modelNameDistance(left, right string) int {
+	leftRunes, rightRunes := []rune(left), []rune(right)
+	previous := make([]int, len(rightRunes)+1)
+	for j := range previous {
+		previous[j] = j
+	}
+	for i, leftRune := range leftRunes {
+		current := make([]int, len(rightRunes)+1)
+		current[0] = i + 1
+		for j, rightRune := range rightRunes {
+			cost := 0
+			if leftRune != rightRune {
+				cost = 1
+			}
+			current[j+1] = min(current[j]+1, previous[j+1]+1, previous[j]+cost)
+		}
+		previous = current
+	}
+	return previous[len(rightRunes)]
 }
 
 // Origin-task pins report a fixed code so task polling can tell a retired
