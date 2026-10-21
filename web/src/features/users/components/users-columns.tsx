@@ -219,6 +219,11 @@ export function useUsersColumns(): ColumnDef<User>[] {
         accessorKey: 'role',
         header: t('Role'),
         cell: ({ row }) => {
+          const user = row.original
+          if (user.is_guest === true) {
+            return <span className='text-sm'>{t('Guest')}</span>
+          }
+
           const roleValue = row.getValue('role') as number
           const roleConfig = USER_ROLES[roleValue as keyof typeof USER_ROLES]
 

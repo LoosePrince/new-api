@@ -111,7 +111,14 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-async function renderPage(path = '/security') {
+async function renderPage(path = '/security', isGuest = false) {
+  useAuthStore
+    .getState()
+    .auth.setUser({
+      ...profile,
+      is_guest: isGuest,
+      permissions: { sidebar_settings: false },
+    })
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -240,6 +247,18 @@ describe('security page migration', () => {
     await user.keyboard('{Escape}')
     await waitFor(() =>
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    )
+  })
+
+  it('guests do not mount access-token controls or request token APIs', async () => {
+    await renderPage('/security', true)
+
+    await screen.findByRole('region', { name: 'Sessions & Access' })
+    expect(screen.queryByText('Access tokens')).not.toBeInTheDocument()
+    expect(api.get).not.toHaveBeenCalledWith('/api/user/access_tokens')
+    expect(api.get).not.toHaveBeenCalledWith(
+      '/api/user/access_tokens/catalog',
+      expect.anything()
     )
   })
 

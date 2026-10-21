@@ -126,6 +126,23 @@ func manageUserProof(t *testing.T, db *gorm.DB, operation service.VerificationOp
 	return identity, proof
 }
 
+func TestBuildSelfUserDataIncludesGuestFlag(t *testing.T) {
+	guest := buildSelfUserData(&model.User{
+		Id:       1,
+		Username: "guest-user",
+		Role:     common.RoleCommonUser,
+		IsGuest:  true,
+	})
+	assert.Equal(t, true, guest["is_guest"])
+
+	standard := buildSelfUserData(&model.User{
+		Id:       2,
+		Username: "standard-user",
+		Role:     common.RoleCommonUser,
+	})
+	assert.Equal(t, false, standard["is_guest"])
+}
+
 func TestManageUserDisableAdvancesAuthVersionOnceAndRevokesSession(t *testing.T) {
 	db := setupManageUserTestDB(t)
 	now := time.Now().Unix()

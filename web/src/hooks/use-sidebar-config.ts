@@ -319,9 +319,17 @@ export function useSidebarConfig(navGroups: NavGroup[]): NavGroup[] {
  * config. Used by entries living outside the sidebar (e.g. the profile
  * dropdown's wallet link) so they honour the same "wallet display" toggle.
  */
+export function isGuestSidebarUrlAllowed(url: string): boolean {
+  return url === '/profile' || url === '/security'
+}
+
 export function useIsSidebarModuleVisible(url: string): boolean {
   const { status } = useStatus()
   const { auth } = useAuthStore()
+
+  if (auth?.user?.is_guest === true && !isGuestSidebarUrlAllowed(url)) {
+    return false
+  }
 
   const adminConfig = parseSidebarConfig(
     status?.SidebarModulesAdmin as string | null | undefined

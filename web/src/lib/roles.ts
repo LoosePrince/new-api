@@ -40,6 +40,7 @@ export function getRoleLabelKey(role?: number): string {
   return ROLE_LABEL_KEYS[role as RoleValue] ?? ROLE_LABEL_KEYS[DEFAULT_ROLE]
 }
 
-export function getRoleLabel(role?: number): string {
+export function getRoleLabel(role?: number, isGuest = false): string {
+  if (isGuest) return t('Guest')
   return t(getRoleLabelKey(role))
 }

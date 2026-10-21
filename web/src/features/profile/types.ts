@@ -45,6 +45,8 @@ export interface UserProfile {
   display_name: string
   /** User role (1=普通用户, 10=管理员, 100=超级管理员) */
   role: number
+  /** Whether this account is a guest account */
+  is_guest?: boolean
   /** Email address */
   email?: string
   /** User group */

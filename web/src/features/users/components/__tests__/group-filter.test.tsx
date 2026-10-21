@@ -52,7 +52,10 @@ afterEach(() => {
   useAuthStore.getState().auth.reset()
 })
 
-async function renderUsers(initialEntry = '/users/') {
+async function renderUsers(
+  initialEntry = '/users/',
+  isGuest = false
+) {
   const get = vi.spyOn(api, 'get').mockImplementation(async (url) => {
     if (url === '/api/group/') {
       return { data: { success: true, data: ['default', 'premium'] } }
@@ -67,6 +70,7 @@ async function renderUsers(initialEntry = '/users/') {
               username: 'premium-user',
               display_name: '',
               role: 1,
+              is_guest: isGuest,
               status: 1,
               quota: 0,
               used_quota: 0,
@@ -120,6 +124,13 @@ function getGroupFilterTrigger() {
   expect(trigger).toBeDefined()
   return trigger as HTMLElement
 }
+
+it('shows Guest instead of User for a guest account with the common-user role', async () => {
+  await renderUsers('/users/', true)
+
+  expect(screen.getByText('Guest')).toBeInTheDocument()
+  expect(screen.queryByText('User')).not.toBeInTheDocument()
+})
 
 it('searches only the selected user group and lists all users again after the filter is cleared', async () => {
   const user = userEvent.setup()

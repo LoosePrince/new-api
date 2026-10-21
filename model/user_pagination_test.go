@@ -35,6 +35,23 @@ func collectUserIDs(users []*User) []int {
 	return ids
 }
 
+func TestGetSelfUserByIdPreservesGuestFlag(t *testing.T) {
+	truncateTables(t)
+	guest := &User{
+		Username: "guest-profile",
+		Password: "password123",
+		Role:     common.RoleCommonUser,
+		IsGuest:  true,
+		Status:   common.UserStatusEnabled,
+		Group:    "default",
+	}
+	require.NoError(t, DB.Create(guest).Error)
+
+	profile, err := GetSelfUserById(guest.Id)
+	require.NoError(t, err)
+	assert.True(t, profile.IsGuest)
+}
+
 func TestGetAllUsersSortsBeforePagination(t *testing.T) {
 	truncateTables(t)
 	insertUsersForPaginationTest(t, 42)

@@ -42,7 +42,7 @@ function PricingFixture() {
         autoGroups='[]'
         maxTokenAutoGroupsField={null}
         groupSpecialUsableGroup='{}'
-        groupPoliciesField={null}
+        groupPolicies='{}'
         onChange={(field, value) =>
           setSettings((current) => ({ ...current, [field]: value }))
         }

@@ -83,6 +83,7 @@ import { toIntlLocale } from '@/i18n/languages'
 import { formatNumber } from '@/lib/format'
 
 import { safeJsonParse } from '../utils/json-parser'
+import { GroupRelayPolicyEditor } from './group-relay-policy-editor'
 import { GroupSpecialUsableRulesEditor } from './group-special-usable-editor'
 
 export type GroupSettingsSection =
@@ -102,7 +103,7 @@ type GroupRatioVisualEditorProps = {
   autoGroups: string
   maxTokenAutoGroupsField: ReactNode
   groupSpecialUsableGroup: string
-  groupPoliciesField?: ReactNode
+  groupPolicies: string
   onChange: (field: string, value: string) => void
 }
 
@@ -278,7 +279,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
   autoGroups,
   maxTokenAutoGroupsField,
   groupSpecialUsableGroup,
-  groupPoliciesField,
+  groupPolicies,
   onChange,
 }: GroupRatioVisualEditorProps) {
   const { t, i18n } = useTranslation()
@@ -385,7 +386,13 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                 )}
               </CardDescription>
             </CardHeader>
-            <CardContent>{groupPoliciesField}</CardContent>
+            <CardContent>
+              <GroupRelayPolicyEditor
+                value={groupPolicies}
+                groupOptions={registryNames}
+                onChange={(value) => onChange('GroupPolicies', value)}
+              />
+            </CardContent>
           </Card>
         </div>
       </TabsContent>

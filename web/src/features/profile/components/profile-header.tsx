@@ -83,7 +83,7 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
   const avatarName = profile.username || displayName
   const avatarFallback = getUserAvatarFallback(avatarName)
   const avatarFallbackStyle = getUserAvatarStyle(avatarName)
-  const roleLabel = getRoleLabel(profile.role)
+  const roleLabel = getRoleLabel(profile.role, profile.is_guest === true)
   const stats: {
     label: string
     value: string

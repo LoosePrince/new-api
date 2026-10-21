@@ -19,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/golang-jwt/jwt/v5"
@@ -612,6 +613,32 @@ func TestGroupEndpointDispatcherMapsSharedAliasesToCanonicalRelayRoute(t *testin
 		assert.Equal(t, http.StatusOK, response.Code, response.Body.String())
 		assert.Contains(t, response.Body.String(), `"path":"/v1/chat/completions"`)
 	}
+}
+
+func TestGroupEndpointDispatcherStopsOuterGzipFallbackAfterReroute(t *testing.T) {
+	previousPolicies := ratio_setting.GroupPolicies2JSONString()
+	t.Cleanup(func() { require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(previousPolicies)) })
+	require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(`{"custom":{"endpoint":"/alias"}}`))
+
+	router := gin.New()
+	dispatched := 0
+	router.NoRoute(
+		GroupEndpointDispatcher(router),
+		gzip.Gzip(gzip.DefaultCompression),
+		func(c *gin.Context) {
+			dispatched++
+			c.String(http.StatusNotFound, "not found")
+		},
+	)
+	request := httptest.NewRequest(http.MethodGet, "/alias/v1/missing", nil)
+	request.Header.Set("Accept-Encoding", "gzip")
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusNotFound, response.Code)
+	assert.Equal(t, "gzip", response.Header().Get("Content-Encoding"))
+	assert.Equal(t, 1, dispatched)
 }
 
 func TestTokenAuthKeylessEndpointUsesUniqueRootOwner(t *testing.T) {

@@ -45,6 +45,7 @@ func GroupEndpointDispatcher(router *gin.Engine) gin.HandlerFunc {
 		}
 		c.Request.URL.Path = path
 		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), groupEndpointRequestContextKey{}, endpoint))
+		c.Abort()
 		router.HandleContext(c)
 	}
 }

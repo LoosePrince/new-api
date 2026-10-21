@@ -25,7 +25,10 @@ import type { NavGroup, ResolvedSidebarView } from '@/components/layout/types'
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { useSidebarConfig } from './use-sidebar-config'
+import {
+  isGuestSidebarUrlAllowed,
+  useSidebarConfig,
+} from './use-sidebar-config'
 import { useSidebarData } from './use-sidebar-data'
 
 /** Sentinel key used for the root navigation in animation `key=` props */
@@ -33,12 +36,29 @@ const ROOT_VIEW_KEY = '__root'
 
 export function filterGuestNavGroups(navGroups: NavGroup[]): NavGroup[] {
   return navGroups
-    .map((group) => {
-      const items = group.items.filter(
-        (item) => item.url === '/profile' || item.url === '/security'
-      )
-      return items.length === group.items.length ? group : { ...group, items }
-    })
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .map((item) => {
+          if (!('items' in item) || !item.items) {
+            return item
+          }
+
+          const items = item.items.filter((subItem) =>
+            isGuestSidebarUrlAllowed(subItem.url as string)
+          )
+          return { ...item, items }
+        })
+        .filter((item) => {
+          if ('url' in item && item.url) {
+            return isGuestSidebarUrlAllowed(item.url as string)
+          }
+          if ('items' in item && item.items) {
+            return item.items.length > 0
+          }
+          return false
+        }),
+    }))
     .filter((group) => group.items.length > 0)
 }
 
@@ -52,8 +72,9 @@ export function filterGuestNavGroups(navGroups: NavGroup[]): NavGroup[] {
  *     · `useSidebarConfig` (admin × user `sidebar_modules` overlay).
  *
  * Nested views are intentionally NOT passed through `useSidebarConfig`
- * — those filters target known dashboard URLs only, and gating is
- * already enforced at the route level (`beforeLoad` redirects).
+ * — those filters target known dashboard URLs only. Guest accounts use
+ * the stricter allowlist below, while route-level guards remain enforced
+ * independently by `beforeLoad`.
  */
 export function useSidebarView(): ResolvedSidebarView {
   const { t } = useTranslation()
@@ -65,7 +86,7 @@ export function useSidebarView(): ResolvedSidebarView {
 
   const rootNavGroups = useMemo<NavGroup[]>(() => {
     if (isGuest) {
-      return filterGuestNavGroups(configFilteredRoot)
+      return filterGuestNavGroups(rootSidebarData.navGroups)
     }
     const role = userRole ?? ROLE.GUEST
     const isAdmin = role >= ROLE.ADMIN
@@ -78,11 +99,11 @@ export function useSidebarView(): ResolvedSidebarView {
         return items.length === group.items.length ? group : { ...group, items }
       })
       .filter((group) => group.items.length > 0)
-  }, [configFilteredRoot, isGuest, userRole])
+  }, [configFilteredRoot, isGuest, rootSidebarData.navGroups, userRole])
 
   const view = resolveSidebarView(pathname)
 
-  if (view) {
+  if (view && !isGuest) {
     return {
       key: view.id,
       view,

@@ -142,6 +142,30 @@ describe('guest sidebar visibility', () => {
     )
     expect(items.map((item) => item.url)).toEqual(['/profile', '/security'])
   })
+
+  it('removes unauthorized nested items instead of leaving an empty section', () => {
+    const groups = filterGuestNavGroups([
+      {
+        id: 'admin',
+        title: 'Admin',
+        items: [
+          {
+            title: 'System Settings',
+            items: [
+              { title: 'Site', url: '/system-settings/site' },
+            ],
+          },
+          { title: 'Profile', url: '/profile' },
+          { title: 'Security', url: '/security' },
+        ],
+      },
+    ])
+
+    expect(groups.flatMap((group) => group.items)).toEqual([
+      { title: 'Profile', url: '/profile' },
+      { title: 'Security', url: '/security' },
+    ])
+  })
 })
 
 describe('audit log sidebar entry', () => {

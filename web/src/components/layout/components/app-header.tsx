@@ -24,6 +24,7 @@ import { Search } from '@/components/search'
 import { SystemUpdateAction } from '@/features/system-update/system-update-action'
 import { useNotifications } from '@/hooks/use-notifications'
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { defaultTopNavLinks } from '../config/top-nav.config'
 import type { TopNavLink } from '../types'
@@ -106,7 +107,13 @@ export function AppHeader({
 }: AppHeaderProps) {
   // Prioritize dynamically generated links from backend
   const dynamicLinks = useTopNavLinks()
-  const links = dynamicLinks.length > 0 ? dynamicLinks : navLinks
+  const isGuest = useAuthStore((state) => state.auth.user?.is_guest === true)
+  let links = navLinks
+  if (isGuest) {
+    links = []
+  } else if (dynamicLinks.length > 0) {
+    links = dynamicLinks
+  }
 
   // Notifications hook
   const notifications = useNotifications()

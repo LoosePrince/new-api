@@ -130,7 +130,9 @@ describe('group settings workspace', () => {
         .map((input) => input.value)
     ).toEqual(['group_2', 'group_1', 'default', 'vip'])
 
-    await user.click(screen.getByRole('button', { name: 'Save group settings' }))
+    await user.click(
+      screen.getByRole('button', { name: 'Save group settings' })
+    )
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     const saved = onSave.mock.calls[0][0]
     expect(JSON.parse(saved.GroupRatio)).toEqual({
@@ -203,7 +205,9 @@ describe('group settings workspace', () => {
     expect(screen.getByRole('button', { name: 'Move vip up' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Move vip down' })).toBeDisabled()
     await user.click(screen.getByRole('tab', { name: 'Pricing groups' }))
-    await user.click(screen.getByRole('button', { name: 'Save group settings' }))
+    await user.click(
+      screen.getByRole('button', { name: 'Save group settings' })
+    )
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     expect(onSave.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
@@ -246,7 +250,9 @@ describe('group settings workspace', () => {
     )
     expect(screen.getByText('Not in pricing table')).toBeVisible()
     await user.click(screen.getByRole('tab', { name: 'Pricing groups' }))
-    await user.click(screen.getByRole('button', { name: 'Save group settings' }))
+    await user.click(
+      screen.getByRole('button', { name: 'Save group settings' })
+    )
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     expect(JSON.parse(onSave.mock.calls[0][0].AutoGroups)).toEqual([
       'vip',
@@ -288,7 +294,9 @@ describe('group settings workspace', () => {
       { target: { value: '0' } }
     )
     await user.click(screen.getByRole('tab', { name: 'Pricing groups' }))
-    await user.click(screen.getByRole('button', { name: 'Save group settings' }))
+    await user.click(
+      screen.getByRole('button', { name: 'Save group settings' })
+    )
     await waitFor(() =>
       expect(
         screen.getByRole('tab', { name: 'Auto group order' })
@@ -326,6 +334,71 @@ describe('group settings workspace', () => {
     ).toBeVisible()
     await user.click(screen.getByRole('tab', { name: 'Auto group order' }))
     expect(screen.getByText('No auto groups configured')).toBeVisible()
+  })
+
+  it('edits and saves relay policies through the visual controls', async () => {
+    const user = userEvent.setup()
+    const onSave = vi.fn(async (_values: typeof defaults) => {})
+    render(
+      <Fixture
+        onSave={onSave}
+        initial={{
+          GroupPolicies:
+            '{"vip":{"endpoint":"/custom","require_key":true,"auto_route":true,"route_strategy":"random"}}',
+        }}
+      />
+    )
+
+    await user.clear(screen.getByRole('textbox', { name: 'Endpoint prefix' }))
+    await user.type(
+      screen.getByRole('textbox', { name: 'Endpoint prefix' }),
+      '/vip-api'
+    )
+    await user.click(screen.getByRole('switch', { name: 'Require API key' }))
+    await user.click(
+      screen.getByRole('combobox', { name: 'Fallback strategy' })
+    )
+    await user.click(screen.getByRole('option', { name: 'Nearest model' }))
+    await user.click(
+      screen.getByRole('button', { name: 'Save group settings' })
+    )
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(JSON.parse(onSave.mock.calls[0][0].GroupPolicies)).toEqual({
+      vip: {
+        endpoint: '/vip-api',
+        require_key: false,
+        auto_route: true,
+        route_strategy: 'nearest',
+      },
+    })
+  })
+
+  it('adds and removes a group relay policy from the visual editor', async () => {
+    const user = userEvent.setup()
+    const onSave = vi.fn(async (_values: typeof defaults) => {})
+    render(<Fixture onSave={onSave} />)
+
+    const groupSelector = screen.getByRole('combobox', {
+      name: 'Add policy for group',
+    })
+    await user.click(groupSelector)
+    await user.type(groupSelector, 'default')
+    await user.click(await screen.findByRole('option', { name: 'default' }))
+    await user.click(screen.getByRole('button', { name: 'Add policy' }))
+    expect(
+      screen.getByRole('textbox', { name: 'Endpoint prefix' })
+    ).toHaveValue('/')
+
+    await user.click(
+      screen.getByRole('button', { name: 'Delete policy for default' })
+    )
+    expect(screen.getByText('No relay policies configured')).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Switch to JSON' }))
+    expect(
+      screen.getByRole('textbox', { name: 'Relay access policies' })
+    ).toHaveValue('{}')
   })
 
   it('preserves pricing edits when switching between visual and JSON editors', async () => {
