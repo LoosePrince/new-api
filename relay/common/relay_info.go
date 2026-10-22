@@ -98,7 +98,10 @@ type RelayInfo struct {
 	UsePrice               bool
 	RelayMode              int
 	OriginModelName        string
-	ResponseModel          *ResponseModel
+	// AttemptModelName is the model selected for the current upstream attempt.
+	// OriginModelName remains the client and billing identity across fallbacks.
+	AttemptModelName string
+	ResponseModel    *ResponseModel
 
 	// BillingModelName is the pricing identity for this request. It is kept
 	// separate from OriginModelName and UpstreamModelName so virtual pricing
@@ -279,6 +282,10 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	paramOverride := common.GetContextKeyStringMap(c, constant.ContextKeyChannelParamOverride)
 	headerOverride := common.GetContextKeyStringMap(c, constant.ContextKeyChannelHeaderOverride)
 	apiType, _ := common.ChannelType2APIType(channelType)
+	attemptModelName := info.OriginModelName
+	if info.AttemptModelName != "" {
+		attemptModelName = info.AttemptModelName
+	}
 	channelMeta := &ChannelMeta{
 		ChannelType:          channelType,
 		ChannelId:            common.GetContextKeyInt(c, constant.ContextKeyChannelId),
@@ -292,7 +299,7 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 		ChannelCreateTime:    c.GetInt64("channel_create_time"),
 		ParamOverride:        paramOverride,
 		HeadersOverride:      headerOverride,
-		UpstreamModelName:    common.GetContextKeyString(c, constant.ContextKeyOriginalModel),
+		UpstreamModelName:    attemptModelName,
 		IsModelMapped:        false,
 		SupportStreamOptions: false,
 	}
@@ -351,7 +358,7 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	// reset some fields based on channel meta
 	// 重置某些字段，例如模型名称等
 	if info.Request != nil {
-		info.Request.SetModelName(info.OriginModelName)
+		info.Request.SetModelName(attemptModelName)
 	}
 }
 

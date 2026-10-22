@@ -355,6 +355,7 @@ describe('request policy settings', () => {
     ['/system-settings/security/sensitive-words', 'filtering'],
     ['/system-settings/operations/monitoring', 'health'],
     ['/system-settings/request-policies/', 'routing'],
+    ['/system-settings/request-policies/relay', 'relay'],
     ['/system-settings/request-policies/unknown', 'routing'],
   ])('%s opens the corresponding policy page', async (path, section) => {
     const router = await renderPolicies(path)

@@ -226,7 +226,6 @@ export const GroupRatioForm = memo(function GroupRatioForm({
               />
             }
             groupSpecialUsableGroup={values.GroupSpecialUsableGroup ?? ''}
-            groupPolicies={values.GroupPolicies ?? '{}'}
             onChange={(field, value) =>
               handleFieldChange(field as keyof GroupFormValues, value)
             }
@@ -304,32 +303,6 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                   <FormDescription>
                     {t(
                       'JSON map of group → description exposed when users create API keys.'
-                    )}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name='GroupPolicies'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Relay access policies')}</FormLabel>
-                  <FormControl>
-                    <JsonCodeEditor
-                      value={field.value}
-                      onChange={field.onChange}
-                      name={field.name}
-                      onBlur={field.onBlur}
-                      textareaRef={field.ref}
-                      heightClassName='h-48 min-h-48 max-h-48'
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Configure endpoint aliases, key requirements and model fallback per group.'
                     )}
                   </FormDescription>
                   <FormMessage />

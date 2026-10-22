@@ -1,7 +1,9 @@
 package service
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -9,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
@@ -177,6 +180,61 @@ func TestSelectChannelForRequestUsesGroupFallbackForAllowedAutoGroup(t *testing.
 	assert.Equal(t, 2401, selected.Id)
 	assert.Equal(t, "vip", selectedGroup)
 	assert.Equal(t, "vip", common.GetContextKeyString(ctx, constant.ContextKeyAutoGroup))
+}
+
+func TestSelectChannelForRequestAdvancesWithinGroupFallbackBudget(t *testing.T) {
+	db := setupChannelSelectAutoGroupsTest(t)
+	createChannelSelectAutoGroupsChannel(t, db, 2501, "default", "requested-model")
+	createChannelSelectAutoGroupsChannel(t, db, 2502, "default", "fallback-model")
+	require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(`{"default":{"auto_route":true,"fallback_times":1}}`))
+	model.InitChannelCache()
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	param := &RetryParam{Ctx: ctx, TokenGroup: "default", ModelName: "requested-model", Retry: common.GetPointer(0)}
+	assert.Equal(t, 1, ModelFallbackRetryBudget(ctx, param))
+	assert.True(t, ShouldRetryForModelFallback(ctx, param, types.NewOpenAIError(errors.New("model unsupported"), types.ErrorCodeBadResponseStatusCode, http.StatusBadRequest)))
+	selected, _, selectErr := SelectChannelForRequest(ctx, param.ModelName, param)
+	require.Nil(t, selectErr)
+	require.NotNil(t, selected)
+	assert.Equal(t, "requested-model", selected.Models)
+
+	param.IncreaseRetry()
+	param.AdvanceFallback()
+	selected, _, selectErr = SelectChannelForRequest(ctx, param.ModelName, param)
+	require.Nil(t, selectErr)
+	require.NotNil(t, selected)
+	assert.Equal(t, "fallback-model", selected.Models)
+	assert.Equal(t, "fallback-model", common.GetContextKeyString(ctx, constant.ContextKeyRoutedModel))
+}
+
+func TestSelectChannelForRequestUsesConfiguredFallbackGroupAfterBudget(t *testing.T) {
+	db := setupChannelSelectAutoGroupsTest(t)
+	createChannelSelectAutoGroupsChannel(t, db, 2601, "default", "requested-model")
+	createChannelSelectAutoGroupsChannel(t, db, 2602, "default", "fallback-model")
+	createChannelSelectAutoGroupsChannel(t, db, 2603, "vip", "vip-model")
+	require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(`{"default":{"auto_route":true,"fallback_times":1,"fallback_group":"vip","fallback_model":"vip-model"}}`))
+	model.InitChannelCache()
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	param := &RetryParam{Ctx: ctx, TokenGroup: "default", ModelName: "requested-model", Retry: common.GetPointer(0)}
+	selected, _, selectErr := SelectChannelForRequest(ctx, param.ModelName, param)
+	require.Nil(t, selectErr)
+	require.NotNil(t, selected)
+
+	param.IncreaseRetry()
+	param.AdvanceFallback()
+	selected, _, selectErr = SelectChannelForRequest(ctx, param.ModelName, param)
+	require.Nil(t, selectErr)
+	require.NotNil(t, selected)
+	assert.Equal(t, "fallback-model", selected.Models)
+
+	param.IncreaseRetry()
+	param.AdvanceFallback()
+	selected, selectedGroup, selectErr := SelectChannelForRequest(ctx, param.ModelName, param)
+	require.Nil(t, selectErr)
+	require.NotNil(t, selected)
+	assert.Equal(t, "vip-model", selected.Models)
+	assert.Equal(t, "vip", selectedGroup)
 }
 
 func TestCacheGetRandomSatisfiedChannelUsesTokenAutoGroupsWhenGlobalAutoIsEmpty(t *testing.T) {

@@ -339,8 +339,8 @@ export function RatioSettingsCard({
       TopupGroupRatio: normalizeJsonString(groupDefaults.TopupGroupRatio),
       UserUsableGroups: normalizeJsonString(groupDefaults.UserUsableGroups),
       GroupGroupRatio: normalizeJsonString(groupDefaults.GroupGroupRatio),
-      GroupPolicies: normalizeJsonString(groupDefaults.GroupPolicies),
-      AutoGroups: normalizeJsonString(groupDefaults.AutoGroups),
+    GroupPolicies: normalizeJsonString(groupDefaults.GroupPolicies),
+        AutoGroups: normalizeJsonString(groupDefaults.AutoGroups),
       MaxTokenAutoGroups: groupDefaults.MaxTokenAutoGroups,
       DefaultUseAutoGroup: groupDefaults.DefaultUseAutoGroup,
       GroupSpecialUsableGroup: normalizeJsonString(

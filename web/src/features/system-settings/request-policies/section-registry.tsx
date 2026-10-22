@@ -20,6 +20,7 @@ import { createSectionRegistry } from '../utils/section-registry'
 import { ChannelHealthSection } from './channel-health-section'
 import type { RequestPolicySettings } from './defaults'
 import { RequestChecksSection } from './request-checks-section'
+import { RelayPolicySection } from './relay-policy-section'
 import { RoutingPolicySection } from './routing-section'
 
 const POLICY_SECTIONS = [
@@ -40,6 +41,11 @@ const POLICY_SECTIONS = [
     id: 'routing',
     titleKey: 'Sessions and retries',
     build: () => <RoutingPolicySection />,
+  },
+  {
+    id: 'relay',
+    titleKey: 'Relay access policies',
+    build: () => <RelayPolicySection />,
   },
   {
     id: 'health',

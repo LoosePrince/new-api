@@ -44,12 +44,14 @@ func AppendTaskPluginIdentityFilter(c *gin.Context, pluginKey string) {
 }
 
 type RetryParam struct {
-	Ctx          *gin.Context
-	TokenGroup   string
-	ModelName    string
-	RequestPath  string
-	Retry        *int
-	resetNextTry bool
+	Ctx            *gin.Context
+	TokenGroup     string
+	ModelName      string
+	RequestPath    string
+	Retry          *int
+	resetNextTry   bool
+	fallbackCount  int
+	fallbackModels map[string][]string
 }
 
 func (p *RetryParam) GetRetry() int {
@@ -76,6 +78,84 @@ func (p *RetryParam) IncreaseRetry() {
 
 func (p *RetryParam) ResetRetryNextTry() {
 	p.resetNextTry = true
+}
+
+// AdvanceFallback moves the next attempt to the next model fallback slot.
+// The global retry counter remains the source of truth for the request budget.
+func (p *RetryParam) AdvanceFallback() {
+	p.fallbackCount++
+}
+
+func (p *RetryParam) fallbackIndex() int {
+	if p.fallbackCount == 0 {
+		return -1
+	}
+	return p.fallbackCount - 1
+}
+
+func ModelFallbackRetryBudget(c *gin.Context, retry *RetryParam) int {
+	if retry == nil || !retryFallbackEnabled(c, retry) {
+		return 0
+	}
+	budget := 0
+	for _, group := range requestFallbackGroups(c, retry) {
+		policy := ratio_setting.GetGroupPolicy(group)
+		if policy.FallbackTimes != nil {
+			budget = max(budget, *policy.FallbackTimes)
+			if policy.FallbackGroup != "" {
+				budget = max(budget, *policy.FallbackTimes+1)
+			}
+		}
+	}
+	return budget
+}
+
+func ShouldRetryForModelFallback(c *gin.Context, retry *RetryParam, err *types.NewAPIError) bool {
+	if err == nil || types.IsSkipRetryError(err) || GetChannelConstraints(c).SuppressesRetry() || ShouldSkipRetryAfterChannelAffinityFailure(c) {
+		return false
+	}
+	if err.StatusCode >= 200 && err.StatusCode < 300 {
+		return false
+	}
+	if !retryFallbackEnabled(c, retry) {
+		return false
+	}
+	for _, group := range requestFallbackGroups(c, retry) {
+		policy := ratio_setting.GetGroupPolicy(group)
+		if policy.FallbackTimes == nil {
+			continue
+		}
+		budget := *policy.FallbackTimes
+		if policy.FallbackGroup != "" {
+			budget++
+		}
+		if retry.fallbackCount < budget {
+			return true
+		}
+	}
+	return false
+}
+
+func retryFallbackEnabled(c *gin.Context, retry *RetryParam) bool {
+	if retry == nil || GetChannelConstraints(c).SuppressesRetry() {
+		return false
+	}
+	for _, group := range requestFallbackGroups(c, retry) {
+		if ratio_setting.GetGroupPolicy(group).AutoRoute {
+			return true
+		}
+	}
+	return false
+}
+
+func requestFallbackGroups(c *gin.Context, retry *RetryParam) []string {
+	if retry.TokenGroup == "auto" {
+		groups := GetRequestAutoGroups(c, common.GetContextKeyString(c, constant.ContextKeyUserGroup))
+		if len(groups) > 0 {
+			return groups
+		}
+	}
+	return []string{retry.TokenGroup}
 }
 
 // CacheGetRandomSatisfiedChannel tries to get a random channel that satisfies the requirements.
@@ -114,6 +194,7 @@ func (p *RetryParam) ResetRetryNextTry() {
 //	Retry=3: GroupB, priority1 (startRetryIndex=2, priorityRetry=1)
 //	         分组B, 优先级1
 func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, error) {
+	common.SetContextKey(param.Ctx, constant.ContextKeyRoutedModel, "")
 	var channel *model.Channel
 	var err error
 	selectGroup := param.TokenGroup
@@ -313,6 +394,13 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 	usingGroup := retry.TokenGroup
 	var channel *model.Channel
 	var selectGroup string
+	if retry.fallbackCount > 0 {
+		if fallbackChannel, fallbackGroup, fallbackModel := selectGroupFallback(c, retry, modelName); fallbackChannel != nil {
+			common.SetContextKey(c, constant.ContextKeyRoutedModel, fallbackModel)
+			common.SetContextKey(c, constant.ContextKeyAutoGroup, fallbackGroup)
+			return fallbackChannel, fallbackGroup, nil
+		}
+	}
 	if retry.GetRetry() == 0 {
 		if preferredChannelID, found := GetPreferredChannelByAffinity(c, modelName, usingGroup); found {
 			affinityUsable := false
@@ -368,9 +456,7 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 				channel = fallbackChannel
 				selectGroup = fallbackGroup
 				common.SetContextKey(c, constant.ContextKeyRoutedModel, fallbackModel)
-				if retry.TokenGroup == "auto" {
-					common.SetContextKey(c, constant.ContextKeyAutoGroup, fallbackGroup)
-				}
+				common.SetContextKey(c, constant.ContextKeyAutoGroup, fallbackGroup)
 			}
 			if channel == nil {
 				return nil, selectGroup, &ChannelSelectError{
@@ -410,51 +496,109 @@ func selectGroupFallback(c *gin.Context, retry *RetryParam, requestedModel strin
 		}
 		groupRetry := *retry
 		groupRetry.TokenGroup = group
-		channel, fallbackModel := selectGroupFallbackForGroup(c, &groupRetry, group, requestedModel, policy)
+		channel, fallbackGroup, fallbackModel := selectGroupFallbackForGroup(c, &groupRetry, group, requestedModel, policy)
 		if channel != nil {
-			return channel, group, fallbackModel
+			return channel, fallbackGroup, fallbackModel
 		}
 	}
 	return nil, "", ""
 }
 
-func selectGroupFallbackForGroup(c *gin.Context, retry *RetryParam, group, requestedModel string, policy ratio_setting.GroupPolicy) (*model.Channel, string) {
+func selectGroupFallbackForGroup(c *gin.Context, retry *RetryParam, group, requestedModel string, policy ratio_setting.GroupPolicy) (*model.Channel, string, string) {
 	candidates := model.GetGroupEnabledModels(group)
-	filtered := candidates[:0]
+	fallbackTimes := -1
+	if policy.FallbackTimes != nil {
+		fallbackTimes = *policy.FallbackTimes
+	}
 	modelLimitEnabled := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
 	var modelLimit map[string]bool
 	if modelLimitEnabled {
-		if value, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit); ok {
-			modelLimit, _ = value.(map[string]bool)
-		}
-		if modelLimit == nil {
-			return nil, ""
+		value, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
+		modelLimit, _ = value.(map[string]bool)
+		if !ok || modelLimit == nil {
+			return nil, "", ""
 		}
 	}
+	filtered := make([]string, 0, len(candidates))
 	for _, candidate := range candidates {
 		if candidate == requestedModel || (modelLimitEnabled && !groupFallbackModelAllowed(modelLimit, candidate)) {
 			continue
 		}
 		filtered = append(filtered, candidate)
 	}
-	candidates = filtered
-	if len(candidates) == 0 {
-		return nil, ""
+	if retry.fallbackModels == nil {
+		retry.fallbackModels = make(map[string][]string)
+	}
+	candidates, exists := retry.fallbackModels[group]
+	if !exists {
+		candidates = orderGroupFallbackModels(filtered, requestedModel, policy.RouteStrategy)
+		retry.fallbackModels[group] = candidates
+	}
+	if retry.fallbackCount == 0 {
+		if len(candidates) == 0 || fallbackTimes == 0 {
+			return selectConfiguredFallback(c, retry, requestedModel, policy)
+		}
+		if fallbackTimes > 0 && len(candidates) > fallbackTimes {
+			candidates = candidates[:fallbackTimes]
+		}
+	} else {
+		fallbackIndex := retry.fallbackIndex()
+		if (fallbackTimes >= 0 && fallbackIndex >= fallbackTimes) || fallbackIndex >= len(candidates) {
+			return selectConfiguredFallback(c, retry, requestedModel, policy)
+		}
+		candidates = candidates[fallbackIndex : fallbackIndex+1]
 	}
 
-	candidates = orderGroupFallbackModels(candidates, requestedModel, policy.RouteStrategy)
-
 	for _, candidate := range candidates {
-		channel, err := model.GetRandomSatisfiedChannel(group, candidate, retry.GetRetry(), GetChannelConstraints(c).Filters)
+		channel, err := model.GetRandomSatisfiedChannel(group, candidate, 0, GetChannelConstraints(c).Filters)
 		if err != nil || channel == nil || channel.Status != common.ChannelStatusEnabled {
 			continue
 		}
 		if ok, _ := model.ChannelSatisfiesFilters(channel, candidate, GetChannelConstraints(c).Filters); !ok {
 			continue
 		}
-		return channel, candidate
+		return channel, group, candidate
 	}
-	return nil, ""
+	return nil, "", ""
+}
+
+func selectConfiguredFallback(c *gin.Context, retry *RetryParam, requestedModel string, policy ratio_setting.GroupPolicy) (*model.Channel, string, string) {
+	if policy.FallbackGroup == "" {
+		return nil, "", ""
+	}
+	targetModels := []string{policy.FallbackModel}
+	if policy.FallbackModel == "" || policy.FallbackModel == "random" {
+		if retry.fallbackModels == nil {
+			retry.fallbackModels = make(map[string][]string)
+		}
+		key := "fallback:" + policy.FallbackGroup
+		var exists bool
+		targetModels, exists = retry.fallbackModels[key]
+		if !exists {
+			targetModels = model.GetGroupEnabledModels(policy.FallbackGroup)
+			targetModels = orderGroupFallbackModels(targetModels, requestedModel, ratio_setting.GetGroupPolicy(policy.FallbackGroup).RouteStrategy)
+			retry.fallbackModels[key] = targetModels
+		}
+	}
+	for _, candidate := range targetModels {
+		if candidate == "" || candidate == requestedModel || !groupFallbackModelAllowedByToken(c, candidate) {
+			continue
+		}
+		channel, err := model.GetRandomSatisfiedChannel(policy.FallbackGroup, candidate, 0, GetChannelConstraints(c).Filters)
+		if err == nil && channel != nil && channel.Status == common.ChannelStatusEnabled {
+			return channel, policy.FallbackGroup, candidate
+		}
+	}
+	return nil, "", ""
+}
+
+func groupFallbackModelAllowedByToken(c *gin.Context, candidate string) bool {
+	if !common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled) {
+		return true
+	}
+	value, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
+	limit, ok := value.(map[string]bool)
+	return ok && limit != nil && groupFallbackModelAllowed(limit, candidate)
 }
 
 func orderGroupFallbackModels(models []string, requestedModel, strategy string) []string {

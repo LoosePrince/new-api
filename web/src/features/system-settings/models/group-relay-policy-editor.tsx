@@ -39,11 +39,15 @@ export type GroupRelayPolicy = {
   require_key?: boolean
   auto_route?: boolean
   route_strategy?: 'sequential' | 'random' | 'nearest'
+  fallback_times?: number
+  fallback_group?: string
+  fallback_model?: string
 }
 
 type GroupRelayPolicyEditorProps = {
   value: string
   groupOptions: string[]
+  modelOptions?: string[]
   onChange: (value: string) => void
 }
 
@@ -75,6 +79,20 @@ function parsePolicies(value: string): Record<string, GroupRelayPolicy> | null {
           policy.route_strategy === 'nearest'
             ? policy.route_strategy
             : 'sequential',
+        fallback_times:
+          typeof policy.fallback_times === 'number' &&
+          Number.isInteger(policy.fallback_times) &&
+          policy.fallback_times >= 0
+            ? policy.fallback_times
+            : 0,
+        fallback_group:
+          typeof policy.fallback_group === 'string'
+            ? policy.fallback_group
+            : '',
+        fallback_model:
+          typeof policy.fallback_model === 'string'
+            ? policy.fallback_model
+            : '',
       }
     }
     return policies
@@ -115,6 +133,9 @@ export function GroupRelayPolicyEditor(props: GroupRelayPolicyEditorProps) {
         require_key: true,
         auto_route: false,
         route_strategy: 'sequential',
+        fallback_times: 0,
+        fallback_group: '',
+        fallback_model: '',
       },
     })
     setNewGroup(null)
@@ -247,36 +268,116 @@ export function GroupRelayPolicyEditor(props: GroupRelayPolicyEditorProps) {
                   </div>
 
                   {autoRoute && (
-                    <div className='flex flex-col gap-2 sm:max-w-sm'>
-                      <Label htmlFor={`relay-route-strategy-${group}`}>
-                        {t('Fallback strategy')}
-                      </Label>
-                      <Select
-                        value={strategy}
-                        onValueChange={(value) =>
-                          value &&
-                          updatePolicy(group, {
-                            route_strategy:
-                              value as GroupRelayPolicy['route_strategy'],
-                          })
-                        }
-                      >
-                        <SelectTrigger
-                          id={`relay-route-strategy-${group}`}
-                          className='w-full'
+                    <div className='grid gap-4 sm:grid-cols-2'>
+                      <div className='flex flex-col gap-2'>
+                        <Label htmlFor={`relay-route-strategy-${group}`}>
+                          {t('Fallback strategy')}
+                        </Label>
+                        <Select
+                          value={strategy}
+                          onValueChange={(value) =>
+                            value &&
+                            updatePolicy(group, {
+                              route_strategy:
+                                value as GroupRelayPolicy['route_strategy'],
+                            })
+                          }
                         >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value='sequential'>
-                            {t('Sequential')}
-                          </SelectItem>
-                          <SelectItem value='random'>{t('Random')}</SelectItem>
-                          <SelectItem value='nearest'>
-                            {t('Nearest model')}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
+                          <SelectTrigger
+                            id={`relay-route-strategy-${group}`}
+                            className='w-full'
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value='sequential'>
+                              {t('Sequential')}
+                            </SelectItem>
+                            <SelectItem value='random'>{t('Random')}</SelectItem>
+                            <SelectItem value='nearest'>
+                              {t('Nearest model')}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className='flex flex-col gap-2'>
+                        <Label htmlFor={`relay-fallback-times-${group}`}>
+                          {t('Fallback attempts')}
+                        </Label>
+                        <Input
+                          id={`relay-fallback-times-${group}`}
+                          type='number'
+                          min={0}
+                          step={1}
+                          value={policy.fallback_times ?? 0}
+                          onChange={(event) =>
+                            updatePolicy(group, {
+                              fallback_times: Math.max(
+                                0,
+                                Number.parseInt(event.target.value, 10) || 0
+                              ),
+                            })
+                          }
+                        />
+                      </div>
+                      <div className='flex flex-col gap-2'>
+                        <Label htmlFor={`relay-fallback-group-${group}`}>
+                          {t('Fallback group')}
+                        </Label>
+                        <Select
+                          value={policy.fallback_group || 'none'}
+                          onValueChange={(value) =>
+                            updatePolicy(group, {
+                              fallback_group:
+                                value && value !== 'none' ? value : '',
+                              fallback_model: '',
+                            })
+                          }
+                        >
+                          <SelectTrigger
+                            id={`relay-fallback-group-${group}`}
+                            className='w-full'
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value='none'>{t('None')}</SelectItem>
+                            {props.groupOptions
+                              .filter((candidate) => candidate !== group)
+                              .map((candidate) => (
+                                <SelectItem key={candidate} value={candidate}>
+                                  {candidate}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {policy.fallback_group ? (
+                        <div className='flex flex-col gap-2'>
+                          <Label htmlFor={`relay-fallback-model-${group}`}>
+                            {t('Fallback model')}
+                          </Label>
+                          <Combobox
+                            id={`relay-fallback-model-${group}`}
+                            options={[
+                              { value: 'random', label: t('Random model') },
+                              ...(props.modelOptions ?? []).map((model) => ({
+                                value: model,
+                                label: model,
+                              })),
+                            ]}
+                            value={policy.fallback_model || undefined}
+                            onValueChange={(value) =>
+                              updatePolicy(group, {
+                                fallback_model: value ?? '',
+                              })
+                            }
+                            placeholder={t('Select a model')}
+                            aria-label={t('Fallback model')}
+                            className='w-full'
+                          />
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </div>

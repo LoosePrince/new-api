@@ -21,6 +21,9 @@ type GroupPolicy struct {
 	RequireKey    *bool  `json:"require_key,omitempty"`
 	AutoRoute     bool   `json:"auto_route"`
 	RouteStrategy string `json:"route_strategy,omitempty"`
+	FallbackTimes *int   `json:"fallback_times,omitempty"`
+	FallbackGroup string `json:"fallback_group,omitempty"`
+	FallbackModel string `json:"fallback_model,omitempty"`
 }
 
 var groupPolicyMap = types.NewRWMap[string, GroupPolicy]()
@@ -63,7 +66,17 @@ func ValidateGroupPoliciesJSON(value string) error {
 		if policy.RouteStrategy != "" && policy.RouteStrategy != AutoRouteSequential && policy.RouteStrategy != AutoRouteRandom && policy.RouteStrategy != AutoRouteNearest {
 			return fmt.Errorf("invalid auto route strategy for group %s", group)
 		}
-		policies[group] = GroupPolicy{Endpoint: endpoint, RequireKey: policy.RequireKey, AutoRoute: policy.AutoRoute, RouteStrategy: policy.RouteStrategy}
+		if policy.FallbackTimes != nil && *policy.FallbackTimes < 0 {
+			return fmt.Errorf("fallback times must not be negative for group %s", group)
+		}
+		if policy.FallbackGroup == group {
+			return fmt.Errorf("fallback group must differ from group %s", group)
+		}
+		policies[group] = GroupPolicy{
+			Endpoint: endpoint, RequireKey: policy.RequireKey, AutoRoute: policy.AutoRoute,
+			RouteStrategy: policy.RouteStrategy, FallbackTimes: policy.FallbackTimes,
+			FallbackGroup: strings.TrimSpace(policy.FallbackGroup), FallbackModel: strings.TrimSpace(policy.FallbackModel),
+		}
 	}
 	return nil
 }

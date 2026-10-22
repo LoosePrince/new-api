@@ -83,7 +83,6 @@ import { toIntlLocale } from '@/i18n/languages'
 import { formatNumber } from '@/lib/format'
 
 import { safeJsonParse } from '../utils/json-parser'
-import { GroupRelayPolicyEditor } from './group-relay-policy-editor'
 import { GroupSpecialUsableRulesEditor } from './group-special-usable-editor'
 
 export type GroupSettingsSection =
@@ -103,7 +102,7 @@ type GroupRatioVisualEditorProps = {
   autoGroups: string
   maxTokenAutoGroupsField: ReactNode
   groupSpecialUsableGroup: string
-  groupPolicies: string
+  groupPolicies?: string
   onChange: (field: string, value: string) => void
 }
 
@@ -279,7 +278,6 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
   autoGroups,
   maxTokenAutoGroupsField,
   groupSpecialUsableGroup,
-  groupPolicies,
   onChange,
 }: GroupRatioVisualEditorProps) {
   const { t, i18n } = useTranslation()
@@ -377,23 +375,6 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
             onChange={onChange}
             onShowDetail={setDetailGroup}
           />
-          <Card className={sectionCardClassName}>
-            <CardHeader className={sectionHeaderClassName}>
-              <CardTitle>{t('Relay access policies')}</CardTitle>
-              <CardDescription>
-                {t(
-                  'Endpoint aliases are access paths only; API-key group authorization remains authoritative.'
-                )}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <GroupRelayPolicyEditor
-                value={groupPolicies}
-                groupOptions={registryNames}
-                onChange={(value) => onChange('GroupPolicies', value)}
-              />
-            </CardContent>
-          </Card>
         </div>
       </TabsContent>
       <TabsContent value='overrides' keepMounted>

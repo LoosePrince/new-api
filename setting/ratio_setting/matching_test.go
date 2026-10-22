@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,6 +45,17 @@ func TestGroupPolicyAllowsSharedEndpointsWithoutSelectingGroup(t *testing.T) {
 	assert.Equal(t, "/v1/chat/completions", path)
 	assert.Equal(t, "/123", endpoint)
 	assert.Len(t, GroupPoliciesForEndpoint(endpoint), 2)
+}
+
+func TestGroupPolicyValidatesFallbackSettings(t *testing.T) {
+	fallbackTimes := 2
+	require.NoError(t, ValidateGroupPoliciesJSON(`{"default":{"auto_route":true,"fallback_times":2,"fallback_group":"vip","fallback_model":"model-b"}}`))
+	policies := map[string]GroupPolicy{"default": {FallbackTimes: &fallbackTimes, FallbackGroup: "vip", FallbackModel: "model-b"}}
+	encoded, err := common.Marshal(policies)
+	require.NoError(t, err)
+	assert.NoError(t, ValidateGroupPoliciesJSON(string(encoded)))
+	assert.Error(t, ValidateGroupPoliciesJSON(`{"default":{"fallback_times":-1}}`))
+	assert.Error(t, ValidateGroupPoliciesJSON(`{"default":{"fallback_group":"default"}}`))
 }
 
 func TestGroupPolicyUsesLongestSharedEndpointAlias(t *testing.T) {
