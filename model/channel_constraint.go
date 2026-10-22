@@ -11,6 +11,7 @@ var filterEvalOrder = []dto.ChannelFilterKind{
 	dto.FilterRequestPath,
 	dto.FilterTaskPluginIdentity,
 	dto.FilterResponsesWebSocket,
+	dto.FilterDirectSelection,
 }
 
 // ChannelSatisfiesFilters reports whether ch passes every filter.
@@ -124,6 +125,8 @@ func channelMatchesFilter(ch *Channel, modelName string, filter dto.ChannelFilte
 		default:
 			return false
 		}
+	case dto.FilterDirectSelection:
+		return !ch.BlocksDirectSelection(modelName)
 	default:
 		return true
 	}

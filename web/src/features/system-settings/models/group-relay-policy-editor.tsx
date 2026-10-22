@@ -42,6 +42,10 @@ export type GroupRelayPolicy = {
   fallback_times?: number
   fallback_group?: string
   fallback_model?: string
+  ignore_model?: boolean
+  allow_no_model?: boolean
+  no_model_strategy?: 'sequential' | 'random' | 'specified'
+  no_model?: string
 }
 
 type GroupRelayPolicyEditorProps = {
@@ -93,6 +97,14 @@ function parsePolicies(value: string): Record<string, GroupRelayPolicy> | null {
           typeof policy.fallback_model === 'string'
             ? policy.fallback_model
             : '',
+        ignore_model: policy.ignore_model === true,
+        allow_no_model: policy.allow_no_model === true,
+        no_model_strategy:
+          policy.no_model_strategy === 'random' ||
+          policy.no_model_strategy === 'specified'
+            ? policy.no_model_strategy
+            : 'sequential',
+        no_model: typeof policy.no_model === 'string' ? policy.no_model : '',
       }
     }
     return policies
@@ -136,6 +148,10 @@ export function GroupRelayPolicyEditor(props: GroupRelayPolicyEditorProps) {
         fallback_times: 0,
         fallback_group: '',
         fallback_model: '',
+        ignore_model: false,
+        allow_no_model: false,
+        no_model_strategy: 'sequential',
+        no_model: '',
       },
     })
     setNewGroup(null)
@@ -378,6 +394,56 @@ export function GroupRelayPolicyEditor(props: GroupRelayPolicyEditorProps) {
                           />
                         </div>
                       ) : null}
+                    </div>
+                  )}
+                  <div className='grid gap-3 sm:grid-cols-2'>
+                    <div className='flex items-center justify-between gap-3 rounded-md border px-3 py-2'>
+                      <Label htmlFor={`relay-ignore-model-${group}`}>{t('Ignore requested model')}</Label>
+                      <Switch
+                        id={`relay-ignore-model-${group}`}
+                        checked={policy.ignore_model === true}
+                        onCheckedChange={(checked) => updatePolicy(group, { ignore_model: checked })}
+                      />
+                    </div>
+                    <div className='flex items-center justify-between gap-3 rounded-md border px-3 py-2'>
+                      <Label htmlFor={`relay-allow-no-model-${group}`}>{t('Allow requests without a model')}</Label>
+                      <Switch
+                        id={`relay-allow-no-model-${group}`}
+                        checked={policy.allow_no_model === true}
+                        onCheckedChange={(checked) => updatePolicy(group, { allow_no_model: checked })}
+                      />
+                    </div>
+                  </div>
+                  {policy.allow_no_model && (
+                    <div className='grid gap-4 sm:grid-cols-2'>
+                      <div className='flex flex-col gap-2'>
+                        <Label htmlFor={`relay-no-model-strategy-${group}`}>{t('No-model selection strategy')}</Label>
+                        <Select
+                          value={policy.no_model_strategy ?? 'sequential'}
+                          onValueChange={(value) => value && updatePolicy(group, { no_model_strategy: value as GroupRelayPolicy['no_model_strategy'] })}
+                        >
+                          <SelectTrigger id={`relay-no-model-strategy-${group}`} className='w-full'><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value='sequential'>{t('Sequential')}</SelectItem>
+                            <SelectItem value='random'>{t('Random')}</SelectItem>
+                            <SelectItem value='specified'>{t('Specified model')}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {policy.no_model_strategy === 'specified' && (
+                        <div className='flex flex-col gap-2'>
+                          <Label htmlFor={`relay-no-model-${group}`}>{t('Specified model')}</Label>
+                          <Combobox
+                            id={`relay-no-model-${group}`}
+                            options={(props.modelOptions ?? []).map((model) => ({ value: model, label: model }))}
+                            value={policy.no_model || undefined}
+                            onValueChange={(value) => updatePolicy(group, { no_model: value ?? '' })}
+                            placeholder={t('Select a model')}
+                            aria-label={t('Specified model')}
+                            className='w-full'
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

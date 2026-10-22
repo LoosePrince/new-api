@@ -291,6 +291,8 @@ export const channelFormSchema = z
     claude_beta_query: z.boolean().optional(), // Anthropic: beta query passthrough
     ollama_openai_chat: z.boolean().optional(), // Ollama: OpenAI-compatible /v1/chat/completions instead of native /api/chat
     disable_task_polling_sleep: z.boolean().optional(),
+    fallback_only: z.boolean().optional(),
+    fallback_only_models: z.string().optional(),
     // Upstream model update settings (stored in settings JSON)
     upstream_model_update_check_enabled: z.boolean().optional(),
     upstream_model_update_auto_sync_enabled: z.boolean().optional(),
@@ -485,6 +487,8 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   claude_beta_query: false,
   ollama_openai_chat: false,
   disable_task_polling_sleep: false,
+  fallback_only: false,
+  fallback_only_models: '',
   upstream_model_update_check_enabled: false,
   upstream_model_update_auto_sync_enabled: false,
   upstream_model_update_ignored_models: '',
@@ -561,6 +565,8 @@ export function transformChannelToFormDefaults(
   let claudeBetaQuery = false
   let ollamaOpenAIChat = false
   let disableTaskPollingSleep = false
+  let fallbackOnly = false
+  let fallbackOnlyModels = ''
   let upstreamModelUpdateCheckEnabled = false
   let upstreamModelUpdateAutoSyncEnabled = false
   let upstreamModelUpdateIgnoredModels = ''
@@ -584,6 +590,10 @@ export function transformChannelToFormDefaults(
       claudeBetaQuery = parsed.claude_beta_query === true
       ollamaOpenAIChat = parsed.ollama_openai_chat === true
       disableTaskPollingSleep = parsed.disable_task_polling_sleep === true
+      fallbackOnly = parsed.fallback_only === true
+      fallbackOnlyModels = Array.isArray(parsed.fallback_only_models)
+        ? parsed.fallback_only_models.join(',')
+        : ''
       upstreamModelUpdateCheckEnabled =
         parsed.upstream_model_update_check_enabled === true
       upstreamModelUpdateAutoSyncEnabled =
@@ -645,6 +655,8 @@ export function transformChannelToFormDefaults(
     claude_beta_query: claudeBetaQuery,
     ollama_openai_chat: ollamaOpenAIChat,
     disable_task_polling_sleep: disableTaskPollingSleep,
+    fallback_only: fallbackOnly,
+    fallback_only_models: fallbackOnlyModels,
     allow_safety_identifier: allowSafetyIdentifier,
     upstream_model_update_check_enabled: upstreamModelUpdateCheckEnabled,
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
@@ -811,6 +823,15 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
 
   settingsObj.disable_task_polling_sleep =
     formData.disable_task_polling_sleep === true
+  settingsObj.fallback_only = formData.fallback_only === true
+  settingsObj.fallback_only_models = [
+    ...new Set(
+      String(formData.fallback_only_models || '')
+        .split(',')
+        .map((model) => model.trim())
+        .filter(Boolean)
+    ),
+  ]
 
   // Upstream model update settings (for model-fetchable channel types)
   if (MODEL_FETCHABLE_TYPES.has(formData.type)) {

@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/samber/lo"
 	"gorm.io/gorm"
@@ -303,6 +304,23 @@ func (channel *Channel) GetModels() []string {
 		return []string{}
 	}
 	return strings.Split(strings.Trim(channel.Models, ","), ",")
+}
+
+func (channel *Channel) BlocksDirectSelection(modelName string) bool {
+	if channel == nil {
+		return true
+	}
+	settings := channel.GetOtherSettings()
+	if settings.FallbackOnly {
+		return true
+	}
+	for _, blockedModel := range settings.FallbackOnlyModels {
+		blockedModel = strings.TrimSpace(blockedModel)
+		if blockedModel != "" && (blockedModel == modelName || ratio_setting.RoutingMatchModelName(blockedModel) == ratio_setting.RoutingMatchModelName(modelName)) {
+			return true
+		}
+	}
+	return false
 }
 
 func (channel *Channel) GetGroups() []string {

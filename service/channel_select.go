@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"sync"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -17,6 +18,63 @@ import (
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 )
+
+var noModelRoundRobin = struct {
+	sync.Mutex
+	indexes map[string]int
+}{indexes: make(map[string]int)}
+
+func ResolveGroupRequestModel(c *gin.Context, group, requested string) (string, error) {
+	policy := ratio_setting.GetGroupPolicy(group)
+	if requested != "" && !policy.IgnoreModel {
+		return requested, nil
+	}
+	if requested == "" && !policy.AllowNoModel {
+		return "", errors.New("model is required")
+	}
+	models := model.GetGroupEnabledModels(group)
+	if len(models) == 0 {
+		return "", errors.New("no models are available for this group")
+	}
+	if policy.NoModelStrategy == ratio_setting.NoModelSpecified {
+		if policy.NoModel == "" {
+			return "", errors.New("no model is configured for this group")
+		}
+		return policy.NoModel, nil
+	}
+	models = orderGroupFallbackModels(models, requested, policy.NoModelStrategy)
+	if policy.NoModelStrategy == ratio_setting.AutoRouteRandom {
+		return models[0], nil
+	}
+	if policy.NoModelStrategy == ratio_setting.AutoRouteSequential {
+		noModelRoundRobin.Lock()
+		index := noModelRoundRobin.indexes[group] % len(models)
+		noModelRoundRobin.indexes[group] = index + 1
+		noModelRoundRobin.Unlock()
+		return models[index], nil
+	}
+	return models[0], nil
+}
+
+func directSelectionFilters(c *gin.Context) []dto.ChannelFilter {
+	filters := append([]dto.ChannelFilter(nil), GetChannelConstraints(c).Filters...)
+	for _, filter := range filters {
+		if filter.Kind == dto.FilterDirectSelection {
+			return filters
+		}
+	}
+	return append(filters, dto.ChannelFilter{Kind: dto.FilterDirectSelection})
+}
+
+func fallbackSelectionFilters(c *gin.Context) []dto.ChannelFilter {
+	filters := make([]dto.ChannelFilter, 0, len(GetChannelConstraints(c).Filters))
+	for _, filter := range GetChannelConstraints(c).Filters {
+		if filter.Kind != dto.FilterDirectSelection {
+			filters = append(filters, filter)
+		}
+	}
+	return filters
+}
 
 func GetChannelConstraints(c *gin.Context) *dto.ChannelConstraints {
 	if c == nil {
@@ -199,7 +257,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 	var err error
 	selectGroup := param.TokenGroup
 	userGroup := common.GetContextKeyString(param.Ctx, constant.ContextKeyUserGroup)
-	filters := GetChannelConstraints(param.Ctx).Filters
+	filters := directSelectionFilters(param.Ctx)
 
 	if param.TokenGroup == "auto" {
 		autoGroups := GetRequestAutoGroups(param.Ctx, userGroup)
@@ -367,6 +425,7 @@ type ChannelSelectError struct {
 func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam) (*model.Channel, string, *ChannelSelectError) {
 	common.SetContextKey(c, constant.ContextKeyRoutedModel, "")
 	constraints := GetChannelConstraints(c)
+	selectionFilters := directSelectionFilters(c)
 	if pin, found, overridden := constraints.ResolvedPin(); found {
 		for _, lost := range overridden {
 			logger.LogWarn(c, common.LogText(
@@ -381,7 +440,7 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 		if channel.Status != common.ChannelStatusEnabled {
 			return nil, "", pinnedChannelUnavailable(pin, http.StatusForbidden, i18n.MsgDistributorChannelDisabled)
 		}
-		if ok, kind := model.ChannelSatisfiesFilters(channel, modelName, constraints.Filters); !ok {
+		if ok, kind := model.ChannelSatisfiesFilters(channel, modelName, selectionFilters); !ok {
 			return nil, "", &ChannelSelectError{
 				StatusCode: http.StatusBadRequest, Code: types.ErrorCode(kind), MessageID: i18n.MsgDistributorNoAvailableChannel,
 				Params:     map[string]any{"Group": common.GetContextKeyString(c, constant.ContextKeyUsingGroup), "Model": modelName},
@@ -394,6 +453,7 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 	usingGroup := retry.TokenGroup
 	var channel *model.Channel
 	var selectGroup string
+	directSelection := true
 	if retry.fallbackCount > 0 {
 		if fallbackChannel, fallbackGroup, fallbackModel := selectGroupFallback(c, retry, modelName); fallbackChannel != nil {
 			common.SetContextKey(c, constant.ContextKeyRoutedModel, fallbackModel)
@@ -407,7 +467,7 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 			preferred, err := model.CacheGetChannel(preferredChannelID)
 			affinitySatisfied := false
 			if err == nil && preferred != nil && preferred.Status == common.ChannelStatusEnabled {
-				affinitySatisfied, _ = model.ChannelSatisfiesFilters(preferred, modelName, constraints.Filters)
+				affinitySatisfied, _ = model.ChannelSatisfiesFilters(preferred, modelName, selectionFilters)
 			}
 			if affinitySatisfied {
 				if usingGroup == "auto" {
@@ -453,6 +513,7 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 		}
 		if channel == nil {
 			if fallbackChannel, fallbackGroup, fallbackModel := selectGroupFallback(c, retry, modelName); fallbackChannel != nil {
+				directSelection = false
 				channel = fallbackChannel
 				selectGroup = fallbackGroup
 				common.SetContextKey(c, constant.ContextKeyRoutedModel, fallbackModel)
@@ -470,7 +531,11 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 	if effectiveModel != "" {
 		modelName = effectiveModel
 	}
-	if ok, kind := model.ChannelSatisfiesFilters(channel, modelName, constraints.Filters); !ok {
+	finalFilters := selectionFilters
+	if !directSelection {
+		finalFilters = GetChannelConstraints(c).Filters
+	}
+	if ok, kind := model.ChannelSatisfiesFilters(channel, modelName, finalFilters); !ok {
 		return nil, selectGroup, &ChannelSelectError{
 			StatusCode: http.StatusServiceUnavailable, Code: types.ErrorCodeModelNotFound, MessageID: i18n.MsgDistributorNoAvailableChannel,
 			Params:     map[string]any{"Group": common.GetContextKeyString(c, constant.ContextKeyUsingGroup), "Model": modelName},
@@ -505,6 +570,7 @@ func selectGroupFallback(c *gin.Context, retry *RetryParam, requestedModel strin
 }
 
 func selectGroupFallbackForGroup(c *gin.Context, retry *RetryParam, group, requestedModel string, policy ratio_setting.GroupPolicy) (*model.Channel, string, string) {
+	filters := fallbackSelectionFilters(c)
 	candidates := model.GetGroupEnabledModels(group)
 	fallbackTimes := -1
 	if policy.FallbackTimes != nil {
@@ -550,11 +616,11 @@ func selectGroupFallbackForGroup(c *gin.Context, retry *RetryParam, group, reque
 	}
 
 	for _, candidate := range candidates {
-		channel, err := model.GetRandomSatisfiedChannel(group, candidate, 0, GetChannelConstraints(c).Filters)
+		channel, err := model.GetRandomSatisfiedChannel(group, candidate, 0, filters)
 		if err != nil || channel == nil || channel.Status != common.ChannelStatusEnabled {
 			continue
 		}
-		if ok, _ := model.ChannelSatisfiesFilters(channel, candidate, GetChannelConstraints(c).Filters); !ok {
+		if ok, _ := model.ChannelSatisfiesFilters(channel, candidate, filters); !ok {
 			continue
 		}
 		return channel, group, candidate
@@ -563,6 +629,7 @@ func selectGroupFallbackForGroup(c *gin.Context, retry *RetryParam, group, reque
 }
 
 func selectConfiguredFallback(c *gin.Context, retry *RetryParam, requestedModel string, policy ratio_setting.GroupPolicy) (*model.Channel, string, string) {
+	filters := fallbackSelectionFilters(c)
 	if policy.FallbackGroup == "" {
 		return nil, "", ""
 	}
@@ -584,7 +651,7 @@ func selectConfiguredFallback(c *gin.Context, retry *RetryParam, requestedModel 
 		if candidate == "" || candidate == requestedModel || !groupFallbackModelAllowedByToken(c, candidate) {
 			continue
 		}
-		channel, err := model.GetRandomSatisfiedChannel(policy.FallbackGroup, candidate, 0, GetChannelConstraints(c).Filters)
+		channel, err := model.GetRandomSatisfiedChannel(policy.FallbackGroup, candidate, 0, filters)
 		if err == nil && channel != nil && channel.Status == common.ChannelStatusEnabled {
 			return channel, policy.FallbackGroup, candidate
 		}

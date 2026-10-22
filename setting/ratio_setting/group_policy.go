@@ -14,16 +14,21 @@ const (
 	AutoRouteSequential = "sequential"
 	AutoRouteRandom     = "random"
 	AutoRouteNearest    = "nearest"
+	NoModelSpecified    = "specified"
 )
 
 type GroupPolicy struct {
-	Endpoint      string `json:"endpoint"`
-	RequireKey    *bool  `json:"require_key,omitempty"`
-	AutoRoute     bool   `json:"auto_route"`
-	RouteStrategy string `json:"route_strategy,omitempty"`
-	FallbackTimes *int   `json:"fallback_times,omitempty"`
-	FallbackGroup string `json:"fallback_group,omitempty"`
-	FallbackModel string `json:"fallback_model,omitempty"`
+	Endpoint        string `json:"endpoint"`
+	RequireKey      *bool  `json:"require_key,omitempty"`
+	AutoRoute       bool   `json:"auto_route"`
+	RouteStrategy   string `json:"route_strategy,omitempty"`
+	FallbackTimes   *int   `json:"fallback_times,omitempty"`
+	FallbackGroup   string `json:"fallback_group,omitempty"`
+	FallbackModel   string `json:"fallback_model,omitempty"`
+	IgnoreModel     bool   `json:"ignore_model,omitempty"`
+	AllowNoModel    bool   `json:"allow_no_model,omitempty"`
+	NoModelStrategy string `json:"no_model_strategy,omitempty"`
+	NoModel         string `json:"no_model,omitempty"`
 }
 
 var groupPolicyMap = types.NewRWMap[string, GroupPolicy]()
@@ -72,10 +77,18 @@ func ValidateGroupPoliciesJSON(value string) error {
 		if policy.FallbackGroup == group {
 			return fmt.Errorf("fallback group must differ from group %s", group)
 		}
+		if policy.NoModelStrategy != "" && policy.NoModelStrategy != AutoRouteSequential && policy.NoModelStrategy != AutoRouteRandom && policy.NoModelStrategy != NoModelSpecified {
+			return fmt.Errorf("invalid no-model strategy for group %s", group)
+		}
+		if policy.NoModelStrategy == NoModelSpecified && strings.TrimSpace(policy.NoModel) == "" {
+			return fmt.Errorf("specified no-model strategy requires a model for group %s", group)
+		}
 		policies[group] = GroupPolicy{
 			Endpoint: endpoint, RequireKey: policy.RequireKey, AutoRoute: policy.AutoRoute,
 			RouteStrategy: policy.RouteStrategy, FallbackTimes: policy.FallbackTimes,
 			FallbackGroup: strings.TrimSpace(policy.FallbackGroup), FallbackModel: strings.TrimSpace(policy.FallbackModel),
+			IgnoreModel: policy.IgnoreModel, AllowNoModel: policy.AllowNoModel,
+			NoModelStrategy: policy.NoModelStrategy, NoModel: strings.TrimSpace(policy.NoModel),
 		}
 	}
 	return nil

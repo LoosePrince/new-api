@@ -315,6 +315,8 @@ const SENSITIVE_FORM_FIELDS = [
   'claude_beta_query',
   'ollama_openai_chat',
   'disable_task_polling_sleep',
+  'fallback_only',
+  'fallback_only_models',
   'upstream_model_update_check_enabled',
   'upstream_model_update_auto_sync_enabled',
   'upstream_model_update_ignored_models',
@@ -3196,6 +3198,34 @@ export function ChannelMutateDrawer({
                       copyChipOnClick
                     />
                   </FormControl>
+                  <div className='grid gap-3 sm:grid-cols-2'>
+                    <FormField
+                      control={form.control}
+                      name='fallback_only'
+                      render={({ field }) => (
+                        <FormItem className='flex items-center justify-between gap-3 rounded-md border px-3 py-2'>
+                          <div>
+                            <FormLabel>{t('Fallback-only channel')}</FormLabel>
+                            <FormDescription>{t('Models on this channel are used only by fallback and safety-group routing.')}</FormDescription>
+                          </div>
+                          <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} disabled={sensitiveLocked} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name='fallback_only_models'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('Fallback-only models')}</FormLabel>
+                          <FormControl><Input {...field} placeholder={t('Comma-separated model names')} disabled={sensitiveLocked} /></FormControl>
+                          <FormDescription>{t('These models cannot be selected directly, but remain available to fallback routing.')}</FormDescription>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                   <div className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs'>
                     <Route className='size-3.5 shrink-0' aria-hidden='true' />
                     {mappingCount > 0 && (

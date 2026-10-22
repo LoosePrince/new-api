@@ -11,6 +11,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestFallbackOnlyChannelAndModelsAreNotDirectlySelectable(t *testing.T) {
+	channel := &Channel{Models: "public,private"}
+	channel.SetOtherSettings(kitdto.ChannelOtherSettings{FallbackOnlyModels: []string{"private"}})
+	assert.True(t, channel.BlocksDirectSelection("private"))
+	assert.False(t, channel.BlocksDirectSelection("public"))
+	channel.SetOtherSettings(kitdto.ChannelOtherSettings{FallbackOnly: true})
+	assert.True(t, channel.BlocksDirectSelection("public"))
+}
+
 func TestFilterCandidateIDs(t *testing.T) {
 	alphaSetting := `{"task_plugin_key":"alpha"}`
 	betaSetting := `{"task_plugin_key":"beta"}`
@@ -215,4 +224,9 @@ func TestChannelSatisfiesFilters(t *testing.T) {
 	}})
 	assert.False(t, ok)
 	assert.Equal(t, dto.FilterRequestPath, kind)
+
+	ordinary.SetOtherSettings(kitdto.ChannelOtherSettings{FallbackOnly: true})
+	ok, kind = ChannelSatisfiesFilters(ordinary, "gpt-4", []dto.ChannelFilter{{Kind: dto.FilterDirectSelection}})
+	assert.False(t, ok)
+	assert.Equal(t, dto.FilterDirectSelection, kind)
 }

@@ -24,6 +24,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 type ModelRequest struct {
@@ -49,6 +50,21 @@ func Distribute() func(c *gin.Context) {
 		if err != nil {
 			abortWithOpenAiMessage(c, invalidRequestStatus(err), i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
+		}
+		if shouldSelectChannel {
+			group := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+			resolvedModel, resolveErr := service.ResolveGroupRequestModel(c, group, modelRequest.Model)
+			if resolveErr != nil {
+				abortWithOpenAiMessage(c, http.StatusBadRequest, resolveErr.Error())
+				return
+			}
+			if resolvedModel != modelRequest.Model {
+				if err := applyResolvedModelToRequest(c, resolvedModel); err != nil {
+					abortWithOpenAiMessage(c, http.StatusBadRequest, err.Error())
+					return
+				}
+				modelRequest.Model = resolvedModel
+			}
 		}
 		_, pinned, _ := constraints.ResolvedPin()
 		if !pinned {
@@ -282,6 +298,31 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 		Model: model,
 		Group: group,
 	}, nil
+}
+
+func applyResolvedModelToRequest(c *gin.Context, modelName string) error {
+	if !strings.HasPrefix(c.Request.Header.Get("Content-Type"), "application/json") {
+		return errors.New("model resolution requires an application/json request")
+	}
+	storage, err := common.GetBodyStorage(c)
+	if err != nil {
+		return err
+	}
+	body, err := storage.Bytes()
+	if err != nil {
+		return err
+	}
+	patched, err := sjson.SetBytes(body, "model", modelName)
+	if err != nil {
+		return err
+	}
+	newStorage, err := common.CreateBodyStorage(patched)
+	if err != nil {
+		return err
+	}
+	c.Set(common.KeyBodyStorage, newStorage)
+	c.Request.Body = io.NopCloser(newStorage)
+	return nil
 }
 
 func countTopLevelJSONKey(data []byte, target string) int {
