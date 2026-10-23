@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/gin-gonic/gin"
@@ -558,8 +560,64 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 	}
 }
 
+func trySetPublicChatOwnerContext(c *gin.Context) bool {
+	if c == nil || c.Request.Method != http.MethodPost ||
+		!strings.HasSuffix(c.Request.URL.Path, "/v1/chat/completions") {
+		return false
+	}
+
+	group := strings.TrimSpace(c.GetHeader("X-Group"))
+	if group == "" {
+		return false
+	}
+	settings := setting.GetPublicHomeSettings()
+	if !settings.ChatEnabled || settings.ChatGroup != group {
+		return false
+	}
+
+	owner, ownerExists, err := uniqueEnabledRootOwner()
+	if err != nil || !ownerExists || !ratio_setting.ContainsGroupRatio(group) {
+		return false
+	}
+	if !service.IsUserSelectableGroup(owner.Group, group) {
+		return false
+	}
+
+	routingMode := settings.ChatRoutingMode
+	if routingMode == "" {
+		routingMode = "group"
+	}
+	switch routingMode {
+	case "group":
+		if !ratio_setting.GetGroupPolicy(group).AllowNoModel {
+			return false
+		}
+	case "model":
+		requestedModel := strings.TrimSpace(c.GetHeader("X-Public-Chat-Model"))
+		if requestedModel == "" || requestedModel != settings.ChatModel ||
+			!slices.Contains(model.GetGroupEnabledModels(group), requestedModel) {
+			return false
+		}
+		c.Set("public_chat_model", requestedModel)
+	default:
+		return false
+	}
+
+	owner.WriteContext(c)
+	c.Set("id", owner.Id)
+	c.Set("token_id", 0)
+	common.SetContextKey(c, constant.ContextKeyUsingGroup, group)
+	common.SetContextKey(c, constant.ContextKeyTokenGroup, group)
+	common.SetContextKey(c, constant.ContextKeyForcedFree, true)
+	return true
+}
+
 func TokenAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
+		if trySetPublicChatOwnerContext(c) {
+			c.Next()
+			return
+		}
 		// 先检测是否为ws
 		applyWebSocketSubprotocolAuthorization(c.Request.Header)
 		// 检查path包含/v1/messages 或 /v1/models

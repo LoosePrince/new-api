@@ -49,6 +49,11 @@ const STATUS_RELATED_KEYS = new Set([
   'passkey.origins',
   'QuotaRemindEnabled',
   'QuotaRemindThreshold',
+  'PublicChatEnabled',
+  'PublicChatGroup',
+  'PublicChatRoutingMode',
+  'PublicChatModel',
+  'GroupPolicies',
 ])
 
 export function useUpdateOption() {

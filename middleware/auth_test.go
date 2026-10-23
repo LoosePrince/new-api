@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -690,6 +691,67 @@ func TestTokenAuthKeylessEndpointUsesUniqueRootOwner(t *testing.T) {
 		assert.Contains(t, response.Body.String(), `"group":"default"`)
 		assert.Contains(t, response.Body.String(), `"forced_free":true`)
 	}
+}
+
+func TestTokenAuthUsesConfiguredPublicChatGroupAndTokenContext(t *testing.T) {
+	setupDashboardAuthMiddlewareTest(t)
+	previousGroups := setting.UserUsableGroups2JSONString()
+	previousRatios := ratio_setting.GroupRatio2JSONString()
+	previousPolicies := ratio_setting.GroupPolicies2JSONString()
+	previousPublic := setting.GetPublicHomeSettings()
+	t.Cleanup(func() {
+		require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(previousGroups))
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousRatios))
+		require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(previousPolicies))
+		previousRoutingMode := previousPublic.ChatRoutingMode
+		if previousRoutingMode == "" {
+			previousRoutingMode = "group"
+		}
+		for key, value := range map[string]string{
+			setting.PublicChatEnabledOption:     strconv.FormatBool(previousPublic.ChatEnabled),
+			setting.PublicChatGroupOption:       previousPublic.ChatGroup,
+			setting.PublicChatRoutingModeOption: previousRoutingMode,
+			setting.PublicChatModelOption:       previousPublic.ChatModel,
+		} {
+			require.NoError(t, setting.UpdatePublicHomeOption(key, value))
+		}
+	})
+
+	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"default":"Default","vip":"VIP"}`))
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"vip":1}`))
+	require.NoError(t, ratio_setting.UpdateGroupPoliciesByJSONString(`{"default":{"endpoint":"/","require_key":true},"vip":{"endpoint":"/","require_key":true,"allow_no_model":true}}`))
+	for key, value := range map[string]string{
+		setting.PublicChatEnabledOption:     "true",
+		setting.PublicChatGroupOption:       "vip",
+		setting.PublicChatRoutingModeOption: "group",
+	} {
+		require.NoError(t, setting.UpdatePublicHomeOption(key, value))
+	}
+	owner := &model.User{Username: "public-chat-owner", Password: "password-placeholder", Role: common.RoleRootUser, Status: common.UserStatusEnabled, Group: "default", AffCode: "public-chat-owner-aff"}
+	require.NoError(t, model.DB.Create(owner).Error)
+
+	router := gin.New()
+	router.Use(GroupEndpoint())
+	router.POST("/v1/chat/completions", TokenAuth(), func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"id":          c.GetInt("id"),
+			"using_group": common.GetContextKeyString(c, constant.ContextKeyUsingGroup),
+			"token_group": common.GetContextKeyString(c, constant.ContextKeyTokenGroup),
+			"forced_free": common.GetContextKeyBool(c, constant.ContextKeyForcedFree),
+		})
+	})
+
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"messages":[]}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Group", "vip")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	assert.Contains(t, response.Body.String(), fmt.Sprintf(`"id":%d`, owner.Id))
+	assert.Contains(t, response.Body.String(), `"using_group":"vip"`)
+	assert.Contains(t, response.Body.String(), `"token_group":"vip"`)
+	assert.Contains(t, response.Body.String(), `"forced_free":true`)
 }
 
 func TestTokenAuthKeylessEndpointFailsClosedWithoutUniqueOwner(t *testing.T) {

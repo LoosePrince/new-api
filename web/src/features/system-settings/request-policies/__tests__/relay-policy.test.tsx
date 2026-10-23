@@ -15,7 +15,7 @@ function PolicyEditorFixture() {
       <GroupRelayPolicyEditor
         value={value}
         groupOptions={['default', 'vip']}
-        modelOptions={['model-a', 'model-b']}
+        modelOptionsByGroup={{ default: ['model-a'], vip: ['model-b'] }}
         onChange={setValue}
       />
       <output aria-label='Serialized policies'>{value}</output>
@@ -28,15 +28,22 @@ describe('relay access policy editor', () => {
     const user = userEvent.setup()
     render(<PolicyEditorFixture />)
 
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Fallback attempts' }), {
-      target: { value: '2' },
-    })
+    fireEvent.change(
+      screen.getByRole('spinbutton', { name: 'Fallback attempts' }),
+      {
+        target: { value: '2' },
+      }
+    )
     await user.click(screen.getByRole('combobox', { name: 'Fallback group' }))
     await user.click(await screen.findByRole('option', { name: 'vip' }))
     await user.click(screen.getByRole('combobox', { name: 'Fallback model' }))
     await user.click(await screen.findByRole('option', { name: 'model-b' }))
 
-    expect(JSON.parse(screen.getByLabelText('Serialized policies').textContent ?? '{}')).toMatchObject({
+    expect(
+      JSON.parse(
+        screen.getByLabelText('Serialized policies').textContent ?? '{}'
+      )
+    ).toMatchObject({
       default: {
         fallback_times: 2,
         fallback_group: 'vip',

@@ -37,3 +37,29 @@ export interface HomePageContentResult {
   isLoaded: boolean
   isUrl: boolean
 }
+
+export interface PublicRuntimeStats {
+  enabled: boolean
+  requests: number
+  tokens: number
+  success_requests: number
+  failed_requests: number
+  success_rate: number
+}
+
+export interface PublicRuntimeStatsResponse {
+  success: boolean
+  message?: string
+  data?: PublicRuntimeStats
+}
+
+export interface PublicChatResponse {
+  choices?: Array<{
+    message?: {
+      content?: string
+    }
+  }>
+  error?: {
+    message?: string
+  }
+}

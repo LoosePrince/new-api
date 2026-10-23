@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -684,6 +685,58 @@ type Stat struct {
 	Quota int `json:"quota"`
 	Rpm   int `json:"rpm"`
 	Tpm   int `json:"tpm"`
+}
+
+type PublicRuntimeStats struct {
+	Requests        int64
+	Tokens          int64
+	SuccessRequests int64
+}
+
+// GetPublicRuntimeStats groups consume and error logs by gateway request ID.
+// A request is successful when any attempt has a consume log, which preserves
+// the final outcome after upstream fallback instead of counting each attempt.
+func GetPublicRuntimeStats() (PublicRuntimeStats, error) {
+	stats := PublicRuntimeStats{}
+	requestResults := make(map[string]bool)
+
+	rows, err := LOG_DB.Model(&Log{}).
+		Select("id, request_id, type, prompt_tokens, completion_tokens").
+		Where("type IN ?", []int{LogTypeConsume, LogTypeError}).
+		Rows()
+	if err != nil {
+		return stats, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var log Log
+		if err := LOG_DB.ScanRows(rows, &log); err != nil {
+			return stats, err
+		}
+		requestID := log.RequestId
+		if requestID == "" {
+			requestID = fmt.Sprintf("log:%d", log.Id)
+		}
+		if _, exists := requestResults[requestID]; !exists {
+			requestResults[requestID] = false
+		}
+		if log.Type == LogTypeConsume {
+			requestResults[requestID] = true
+			stats.Tokens += int64(log.PromptTokens) + int64(log.CompletionTokens)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return stats, err
+	}
+
+	stats.Requests = int64(len(requestResults))
+	for _, successful := range requestResults {
+		if successful {
+			stats.SuccessRequests++
+		}
+	}
+	return stats, nil
 }
 
 func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat, err error) {

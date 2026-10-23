@@ -18,7 +18,11 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
 
-import type { HomePageContentResponse } from './types'
+import type {
+  HomePageContentResponse,
+  PublicChatResponse,
+  PublicRuntimeStatsResponse,
+} from './types'
 
 // ============================================================================
 // Home Page APIs
@@ -35,5 +39,35 @@ export async function getHomePageContent(): Promise<HomePageContentResponse> {
   const res = await api.get('/api/home_page_content', {
     headers: { 'Cache-Control': null },
   })
+  return res.data
+}
+
+export async function getPublicRuntimeStats(): Promise<PublicRuntimeStatsResponse> {
+  const res = await api.get('/api/public/stats')
+  return res.data
+}
+
+export async function sendPublicChatMessage(
+  endpoint: string,
+  group: string,
+  routingMode: 'group' | 'model',
+  model: string,
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+): Promise<PublicChatResponse> {
+  const normalizedEndpoint = endpoint.trim().replace(/\/+$/, '')
+  const path = `${normalizedEndpoint || ''}/v1/chat/completions`
+  const headers =
+    routingMode === 'group'
+      ? { 'X-Group': group }
+      : { 'X-Group': group, 'X-Public-Chat-Model': model }
+  const res = await api.post(
+    path,
+    { messages, stream: false },
+    {
+      headers,
+      skipAuthorization: true,
+      skipErrorHandler: true,
+    }
+  )
   return res.data
 }

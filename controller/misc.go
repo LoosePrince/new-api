@@ -17,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/console_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/gin-gonic/gin"
@@ -91,6 +92,12 @@ func GetStatus(c *gin.Context) {
 		"password_login_enabled":        common.PasswordLoginEnabled,
 		"password_register_enabled":     common.PasswordRegisterEnabled,
 		"default_use_auto_group":        setting.DefaultUseAutoGroup,
+		"public_chat_enabled":           setting.GetPublicHomeSettings().ChatEnabled,
+		"public_chat_group":             setting.GetPublicHomeSettings().ChatGroup,
+		"public_chat_endpoint":          ratio_setting.GetGroupPolicy(setting.GetPublicHomeSettings().ChatGroup).Endpoint,
+		"public_chat_routing_mode":      setting.GetPublicHomeSettings().ChatRoutingMode,
+		"public_chat_model":             setting.GetPublicHomeSettings().ChatModel,
+		"public_stats_enabled":          setting.GetPublicHomeSettings().StatsEnabled,
 
 		"password_login_encryption_enabled": common.PasswordLoginEncryptionEnabled,
 
@@ -214,6 +221,52 @@ func GetHomePageContent(c *gin.Context) {
 	homePageContent := common.OptionMap["HomePageContent"]
 	common.OptionMapRWMutex.RUnlock()
 	serveRevalidatedJSON(c, homePageContent)
+}
+
+func GetPublicRuntimeStats(c *gin.Context) {
+	settings := setting.GetPublicHomeSettings()
+	if !settings.StatsEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+			"data":    gin.H{"enabled": false},
+		})
+		return
+	}
+
+	runtimeStats, err := model.GetPublicRuntimeStats()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	requests := max(int64(0), runtimeStats.Requests+settings.RequestAdjustment)
+	tokens := max(int64(0), runtimeStats.Tokens+settings.TokenAdjustment)
+	successRequests := max(int64(0), runtimeStats.SuccessRequests+settings.SuccessAdjustment)
+	if successRequests > requests {
+		successRequests = requests
+	}
+	failedRequests := max(int64(0), runtimeStats.Requests-runtimeStats.SuccessRequests+settings.FailureAdjustment)
+	if failedRequests > requests-successRequests {
+		failedRequests = requests - successRequests
+	}
+
+	successRate := float64(0)
+	if requests > 0 {
+		successRate = float64(successRequests) / float64(requests) * 100
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"enabled":          true,
+			"requests":         requests,
+			"tokens":           tokens,
+			"success_requests": successRequests,
+			"failed_requests":  failedRequests,
+			"success_rate":     successRate,
+		},
+	})
 }
 
 func SendEmailVerification(c *gin.Context) {

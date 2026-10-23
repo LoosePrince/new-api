@@ -51,6 +51,15 @@ func Distribute() func(c *gin.Context) {
 			abortWithOpenAiMessage(c, invalidRequestStatus(err), i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
 		}
+		if publicModel := c.GetString("public_chat_model"); publicModel != "" {
+			if modelRequest.Model != publicModel {
+				if err := applyResolvedModelToRequest(c, publicModel); err != nil {
+					abortWithOpenAiMessage(c, http.StatusBadRequest, err.Error())
+					return
+				}
+			}
+			modelRequest.Model = publicModel
+		}
 		if shouldSelectChannel {
 			group := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 			resolvedModel, resolveErr := service.ResolveGroupRequestModel(c, group, modelRequest.Model)

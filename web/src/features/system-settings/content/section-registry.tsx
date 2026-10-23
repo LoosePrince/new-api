@@ -24,6 +24,7 @@ import { ChatSettingsSection } from './chat-settings-section'
 import { DashboardSection } from './dashboard-section'
 import { DrawingSettingsSection } from './drawing-settings-section'
 import { FAQSection } from './faq-section'
+import { PublicHomeSection } from './public-home-section'
 import { UptimeKumaSection } from './uptime-kuma-section'
 
 /**
@@ -49,6 +50,28 @@ const CONTENT_SECTIONS = [
           DataExportDefaultTime: validateDataExportDefaultTime(
             settings.DataExportDefaultTime
           ),
+        }}
+      />
+    ),
+  },
+  {
+    id: 'public-home',
+    titleKey: 'Public Home',
+    build: (settings: ContentSettings) => (
+      <PublicHomeSection
+        defaultValues={{
+          PublicStatsEnabled: settings.PublicStatsEnabled,
+          PublicChatEnabled: settings.PublicChatEnabled,
+          PublicChatGroup: settings.PublicChatGroup,
+          PublicChatRoutingMode: settings.PublicChatRoutingMode,
+          PublicChatModel: settings.PublicChatModel,
+          PublicStatsRequestAdjustment: settings.PublicStatsRequestAdjustment,
+          GroupRatio: settings.GroupRatio,
+          UserUsableGroups: settings.UserUsableGroups,
+          GroupPolicies: settings.GroupPolicies,
+          PublicStatsTokenAdjustment: settings.PublicStatsTokenAdjustment,
+          PublicStatsSuccessAdjustment: settings.PublicStatsSuccessAdjustment,
+          PublicStatsFailureAdjustment: settings.PublicStatsFailureAdjustment,
         }}
       />
     ),

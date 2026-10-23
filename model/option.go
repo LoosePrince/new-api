@@ -82,6 +82,16 @@ func InitOptionMap() {
 	common.OptionMap["Notice"] = ""
 	common.OptionMap["About"] = ""
 	common.OptionMap["HomePageContent"] = ""
+	publicHomeSettings := setting.GetPublicHomeSettings()
+	common.OptionMap[setting.PublicStatsEnabledOption] = strconv.FormatBool(publicHomeSettings.StatsEnabled)
+	common.OptionMap[setting.PublicChatEnabledOption] = strconv.FormatBool(publicHomeSettings.ChatEnabled)
+	common.OptionMap[setting.PublicChatGroupOption] = publicHomeSettings.ChatGroup
+	common.OptionMap[setting.PublicChatRoutingModeOption] = publicHomeSettings.ChatRoutingMode
+	common.OptionMap[setting.PublicChatModelOption] = publicHomeSettings.ChatModel
+	common.OptionMap[setting.PublicStatsRequestAdjustmentOption] = strconv.FormatInt(publicHomeSettings.RequestAdjustment, 10)
+	common.OptionMap[setting.PublicStatsTokenAdjustmentOption] = strconv.FormatInt(publicHomeSettings.TokenAdjustment, 10)
+	common.OptionMap[setting.PublicStatsSuccessAdjustmentOption] = strconv.FormatInt(publicHomeSettings.SuccessAdjustment, 10)
+	common.OptionMap[setting.PublicStatsFailureAdjustmentOption] = strconv.FormatInt(publicHomeSettings.FailureAdjustment, 10)
 	common.OptionMap["Footer"] = common.Footer
 	common.OptionMap["SystemName"] = common.SystemName
 	common.OptionMap["Logo"] = common.Logo
@@ -234,6 +244,9 @@ func SyncOptions(frequency int) {
 }
 
 func validateOptionValue(key string, value string) error {
+	if setting.IsPublicHomeOption(key) {
+		return setting.ValidatePublicHomeOption(key, value)
+	}
 	if key == legacyAccessTokenRetireAtKey {
 		return errLegacyRetireAtReadOnly
 	}
@@ -385,6 +398,10 @@ func updateOptionMap(key string, value string) (err error) {
 	common.OptionMapRWMutex.Lock()
 	defer common.OptionMapRWMutex.Unlock()
 	common.OptionMap[key] = value
+
+	if setting.IsPublicHomeOption(key) {
+		return setting.UpdatePublicHomeOption(key, value)
+	}
 
 	// 检查是否是模型配置 - 使用更规范的方式处理
 	if handleConfigUpdate(key, value) {

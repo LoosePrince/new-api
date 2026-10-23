@@ -218,6 +218,18 @@ export type ContentSettings = {
   DataExportEnabled: boolean
   DataExportDefaultTime: string
   DataExportInterval: number
+  PublicStatsEnabled: boolean
+  PublicChatEnabled: boolean
+  PublicChatGroup: string
+  PublicChatRoutingMode: 'group' | 'model'
+  PublicChatModel: string
+  PublicStatsRequestAdjustment: number
+  GroupRatio: string
+  UserUsableGroups: string
+  GroupPolicies: string
+  PublicStatsTokenAdjustment: number
+  PublicStatsSuccessAdjustment: number
+  PublicStatsFailureAdjustment: number
   Chats: string
   DrawingEnabled: boolean
   MjNotifyEnabled: boolean

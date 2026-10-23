@@ -41,6 +41,7 @@ declare module 'axios' {
     authRetry?: boolean
     acceptAuthRotation?: boolean
     singleUseAuthorization?: boolean
+    skipAuthorization?: boolean
   }
 }
 
@@ -145,6 +146,10 @@ api.interceptors.response.use(
 )
 
 api.interceptors.request.use(async (config) => {
+  if (config.skipAuthorization) {
+    config.skipAuthRefresh = true
+    return config
+  }
   if (config.singleUseAuthorization || config.headers.has('X-Security-Proof')) {
     // Refresh before spending a proof/flow, never by replaying its request.
     config.skipAuthRefresh = true
