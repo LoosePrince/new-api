@@ -27,6 +27,7 @@ import { isLikelyHtml } from '@/lib/content-format'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { Promo, PublicChat, RuntimeStats } from './components'
+import { ApiAccess } from './components/sections/api-access'
 import { useHomePageContent } from './hooks'
 
 export function Home() {
@@ -123,6 +124,7 @@ export function Home() {
   return (
     <PublicLayout showMainContainer={false}>
       <Promo isAuthenticated={isAuthenticated} />
+      <ApiAccess />
       <RuntimeStats />
       <PublicChat />
       <Footer />

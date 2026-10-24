@@ -7437,6 +7437,23 @@
     "Public chat model": "Public chat model",
     "Only models enabled in the selected group can be used.": "Only models enabled in the selected group can be used.",
     "Enable requests without a model in this group policy first.": "Enable requests without a model in this group policy first.",
+    "API access": "Accès à l’API",
+    "Use the configured API base and compatible routes.": "Utilisez l’URL API configurée et les routes compatibles.",
+    "API Base": "URL de base de l’API",
+    "Copy API Base": "Copier l’URL de base de l’API",
+    "Compatible endpoints": "Points de terminaison compatibles",
+    "Group": "Groupe",
+    "Fallback policy": "Règle de repli",
+    "Reasoning fields": "Champs de raisonnement",
+    "Reasoning output fields depend on the selected model and endpoint. Common fields include reasoning, thinking, and reasoning_content.": "Les champs de raisonnement dépendent du modèle et du point de terminaison. Les champs courants incluent reasoning, thinking et reasoning_content.",
+    "Homepage API reference group": "Groupe de référence API de la page d’accueil",
+    "The homepage API reference uses this group to describe API key, model selection, and fallback behavior.": "La référence API de la page d’accueil utilise ce groupe pour décrire la clé API, la sélection du modèle et le comportement de repli.",
+    "Any API key value or an empty key works for requests.": "Toute valeur de clé API, ou une clé vide, permet d’effectuer des requêtes.",
+    "A valid API key is required for requests.": "Une clé API valide est requise pour effectuer des requêtes.",
+    "Similar model names are supported; omit the model name to select automatically.": "Les noms de modèles similaires sont acceptés ; omettez le nom du modèle pour une sélection automatique.",
+    "A model name is required for requests.": "Un nom de modèle est requis pour effectuer des requêtes.",
+    "Automatically switches to another model after a model failure.": "En cas d’échec du modèle, bascule automatiquement vers un autre modèle.",
+    "No automatic model fallback is configured.": "Aucun repli automatique de modèle n’est configuré.",
     "Group policy configuration is invalid.": "Group policy configuration is invalid."
   }
 }

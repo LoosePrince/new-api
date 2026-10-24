@@ -7470,6 +7470,23 @@
     "Public chat model": "公開對話模型",
     "Only models enabled in the selected group can be used.": "僅可選擇已啟用該分組的模型。",
     "Enable requests without a model in this group policy first.": "請先在該分組策略中開啟允許無模型請求。",
+    "API access": "API 呼叫",
+    "Use the configured API base and compatible routes.": "使用已設定的 API Base 與相容端點。",
+    "API Base": "API Base",
+    "Copy API Base": "複製 API Base",
+    "Compatible endpoints": "相容端點",
+    "Group": "分組",
+    "Fallback policy": "回退策略",
+    "Reasoning fields": "推理欄位",
+    "Reasoning output fields depend on the selected model and endpoint. Common fields include reasoning, thinking, and reasoning_content.": "推理輸出欄位取決於所選模型與端點，常見欄位包括 reasoning、thinking 與 reasoning_content。",
+    "Homepage API reference group": "首頁 API 說明分組",
+    "The homepage API reference uses this group to describe API key, model selection, and fallback behavior.": "首頁 API 說明會依據此分組展示 API Key、模型選擇與回退行為。",
+    "Any API key value or an empty key works for requests.": "API 金鑰可填入任意字元，也可以留空，皆可正常請求。",
+    "A valid API key is required for requests.": "請求需要提供有效的 API 金鑰。",
+    "Similar model names are supported; omit the model name to select automatically.": "支援相近模型名稱比對；省略模型名稱即可自動選擇。",
+    "A model name is required for requests.": "請求需要提供模型名稱。",
+    "Automatically switches to another model after a model failure.": "模型請求失敗後會自動切換其他模型回應。",
+    "No automatic model fallback is configured.": "未設定模型自動回退。",
     "Group policy configuration is invalid.": "分組策略設定無效。"
   }
 }

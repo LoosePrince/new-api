@@ -223,6 +223,7 @@ export type ContentSettings = {
   PublicChatGroup: string
   PublicChatRoutingMode: 'group' | 'model'
   PublicChatModel: string
+  PublicApiGroup: string
   PublicStatsRequestAdjustment: number
   GroupRatio: string
   UserUsableGroups: string

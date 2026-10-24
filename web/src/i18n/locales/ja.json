@@ -7437,6 +7437,23 @@
     "Public chat model": "Public chat model",
     "Only models enabled in the selected group can be used.": "Only models enabled in the selected group can be used.",
     "Enable requests without a model in this group policy first.": "Enable requests without a model in this group policy first.",
+    "API access": "API アクセス",
+    "Use the configured API base and compatible routes.": "設定済みの API ベース URL と互換エンドポイントを使用します。",
+    "API Base": "API ベース URL",
+    "Copy API Base": "API ベース URL をコピー",
+    "Compatible endpoints": "互換エンドポイント",
+    "Group": "グループ",
+    "Fallback policy": "フォールバック設定",
+    "Reasoning fields": "推論フィールド",
+    "Reasoning output fields depend on the selected model and endpoint. Common fields include reasoning, thinking, and reasoning_content.": "推論出力フィールドはモデルとエンドポイントによって異なります。一般的なフィールドは reasoning、thinking、reasoning_content です。",
+    "Homepage API reference group": "ホームの API 参照グループ",
+    "The homepage API reference uses this group to describe API key, model selection, and fallback behavior.": "ホームの API 参照では、このグループに基づいて API キー、モデル選択、フォールバック動作を説明します。",
+    "Any API key value or an empty key works for requests.": "API キーには任意の値を入力するか、空欄のままでもリクエストできます。",
+    "A valid API key is required for requests.": "リクエストには有効な API キーが必要です。",
+    "Similar model names are supported; omit the model name to select automatically.": "類似したモデル名に対応しています。モデル名を省略すると自動選択されます。",
+    "A model name is required for requests.": "リクエストにはモデル名が必要です。",
+    "Automatically switches to another model after a model failure.": "モデルの失敗後、別のモデルに自動で切り替えます。",
+    "No automatic model fallback is configured.": "モデルの自動フォールバックは設定されていません。",
     "Group policy configuration is invalid.": "Group policy configuration is invalid."
   }
 }

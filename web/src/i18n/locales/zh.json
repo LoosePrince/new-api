@@ -7437,6 +7437,23 @@
     "Public chat model": "公开对话模型",
     "Only models enabled in the selected group can be used.": "仅可选择已启用该分组的模型。",
     "Enable requests without a model in this group policy first.": "请先在该分组策略中开启允许无模型请求。",
+    "API access": "API 调用",
+    "Use the configured API base and compatible routes.": "使用已配置的 API Base 和兼容端点。",
+    "API Base": "API Base",
+    "Copy API Base": "复制 API Base",
+    "Compatible endpoints": "兼容端点",
+    "Group": "分组",
+    "Fallback policy": "回退策略",
+    "Reasoning fields": "推理字段",
+    "Reasoning output fields depend on the selected model and endpoint. Common fields include reasoning, thinking, and reasoning_content.": "推理输出字段取决于所选模型和端点，常见字段包括 reasoning、thinking 和 reasoning_content。",
+    "Homepage API reference group": "首页 API 说明分组",
+    "The homepage API reference uses this group to describe API key, model selection, and fallback behavior.": "首页 API 说明将根据此分组展示 API Key、模型选择和回退行为。",
+    "Any API key value or an empty key works for requests.": "API 密钥可填写任意字符，也可以留空，均可正常请求。",
+    "A valid API key is required for requests.": "请求需要提供有效的 API 密钥。",
+    "Similar model names are supported; omit the model name to select automatically.": "支持相近模型名称匹配；省略模型名称则自动选择。",
+    "A model name is required for requests.": "请求需要提供模型名称。",
+    "Automatically switches to another model after a model failure.": "模型请求失败后会自动切换其他模型响应。",
+    "No automatic model fallback is configured.": "未配置模型自动回退。",
     "Group policy configuration is invalid.": "分组策略配置无效。"
   }
 }

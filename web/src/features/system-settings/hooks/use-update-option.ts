@@ -53,6 +53,7 @@ const STATUS_RELATED_KEYS = new Set([
   'PublicChatGroup',
   'PublicChatRoutingMode',
   'PublicChatModel',
+  'PublicApiGroup',
   'GroupPolicies',
 ])
 

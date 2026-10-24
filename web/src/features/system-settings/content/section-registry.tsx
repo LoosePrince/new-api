@@ -65,6 +65,7 @@ const CONTENT_SECTIONS = [
           PublicChatGroup: settings.PublicChatGroup,
           PublicChatRoutingMode: settings.PublicChatRoutingMode,
           PublicChatModel: settings.PublicChatModel,
+          PublicApiGroup: settings.PublicApiGroup,
           PublicStatsRequestAdjustment: settings.PublicStatsRequestAdjustment,
           GroupRatio: settings.GroupRatio,
           UserUsableGroups: settings.UserUsableGroups,

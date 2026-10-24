@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
 const (
@@ -13,6 +15,7 @@ const (
 	PublicChatGroupOption              = "PublicChatGroup"
 	PublicChatRoutingModeOption        = "PublicChatRoutingMode"
 	PublicChatModelOption              = "PublicChatModel"
+	PublicApiGroupOption               = "PublicApiGroup"
 	PublicStatsRequestAdjustmentOption = "PublicStatsRequestAdjustment"
 	PublicStatsTokenAdjustmentOption   = "PublicStatsTokenAdjustment"
 	PublicStatsSuccessAdjustmentOption = "PublicStatsSuccessAdjustment"
@@ -25,6 +28,7 @@ type PublicHomeSettings struct {
 	ChatGroup         string
 	ChatRoutingMode   string
 	ChatModel         string
+	ApiGroup          string
 	RequestAdjustment int64
 	TokenAdjustment   int64
 	SuccessAdjustment int64
@@ -35,7 +39,7 @@ var publicHomeSettings = struct {
 	sync.RWMutex
 	value PublicHomeSettings
 }{
-	value: PublicHomeSettings{ChatRoutingMode: "group"},
+	value: PublicHomeSettings{ChatRoutingMode: "group", ApiGroup: "default"},
 }
 
 func GetPublicHomeSettings() PublicHomeSettings {
@@ -47,7 +51,7 @@ func GetPublicHomeSettings() PublicHomeSettings {
 func IsPublicHomeOption(key string) bool {
 	switch key {
 	case PublicStatsEnabledOption, PublicChatEnabledOption, PublicChatGroupOption,
-		PublicChatRoutingModeOption, PublicChatModelOption,
+		PublicChatRoutingModeOption, PublicChatModelOption, PublicApiGroupOption,
 		PublicStatsRequestAdjustmentOption, PublicStatsTokenAdjustmentOption,
 		PublicStatsSuccessAdjustmentOption, PublicStatsFailureAdjustmentOption:
 		return true
@@ -67,9 +71,13 @@ func ValidatePublicHomeOption(key, value string) error {
 		if _, err := strconv.ParseInt(value, 10, 64); err != nil {
 			return fmt.Errorf("%s must be an integer", key)
 		}
-	case PublicChatGroupOption:
-		if len([]rune(strings.TrimSpace(value))) > 100 {
+	case PublicChatGroupOption, PublicApiGroupOption:
+		group := strings.TrimSpace(value)
+		if len([]rune(group)) > 100 {
 			return fmt.Errorf("%s must not exceed 100 characters", key)
+		}
+		if key == PublicApiGroupOption && group != "" && !ratio_setting.ContainsGroupRatio(group) {
+			return fmt.Errorf("%s must be an existing group", key)
 		}
 	case PublicChatRoutingModeOption:
 		if value != "group" && value != "model" {
@@ -104,6 +112,8 @@ func UpdatePublicHomeOption(key, value string) error {
 		publicHomeSettings.value.ChatRoutingMode = strings.TrimSpace(value)
 	case PublicChatModelOption:
 		publicHomeSettings.value.ChatModel = strings.TrimSpace(value)
+	case PublicApiGroupOption:
+		publicHomeSettings.value.ApiGroup = strings.TrimSpace(value)
 	case PublicStatsRequestAdjustmentOption:
 		publicHomeSettings.value.RequestAdjustment, _ = strconv.ParseInt(value, 10, 64)
 	case PublicStatsTokenAdjustmentOption:

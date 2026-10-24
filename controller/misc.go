@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -47,6 +48,22 @@ func GetStatus(c *gin.Context) {
 	defer common.OptionMapRWMutex.RUnlock()
 
 	legalSetting := system_setting.GetLegalSettings()
+	publicHome := setting.GetPublicHomeSettings()
+	publicApiGroup := strings.TrimSpace(publicHome.ApiGroup)
+	if publicApiGroup == "" {
+		publicApiGroup = strings.TrimSpace(publicHome.ChatGroup)
+	}
+	if publicApiGroup == "" {
+		publicApiGroup = "default"
+	}
+	publicApiPolicy := ratio_setting.GetGroupPolicy(publicApiGroup)
+	publicApiRequireKey := true
+	if publicApiPolicy.RequireKey != nil {
+		publicApiRequireKey = *publicApiPolicy.RequireKey
+	}
+	publicApiHasFallback := publicApiPolicy.AutoRoute &&
+		publicApiPolicy.FallbackTimes != nil &&
+		(*publicApiPolicy.FallbackTimes > 0 || publicApiPolicy.FallbackGroup != "")
 
 	data := gin.H{
 		"version":                     common.Version,
@@ -92,12 +109,17 @@ func GetStatus(c *gin.Context) {
 		"password_login_enabled":        common.PasswordLoginEnabled,
 		"password_register_enabled":     common.PasswordRegisterEnabled,
 		"default_use_auto_group":        setting.DefaultUseAutoGroup,
-		"public_chat_enabled":           setting.GetPublicHomeSettings().ChatEnabled,
-		"public_chat_group":             setting.GetPublicHomeSettings().ChatGroup,
-		"public_chat_endpoint":          ratio_setting.GetGroupPolicy(setting.GetPublicHomeSettings().ChatGroup).Endpoint,
-		"public_chat_routing_mode":      setting.GetPublicHomeSettings().ChatRoutingMode,
-		"public_chat_model":             setting.GetPublicHomeSettings().ChatModel,
-		"public_stats_enabled":          setting.GetPublicHomeSettings().StatsEnabled,
+		"public_chat_enabled":           publicHome.ChatEnabled,
+		"public_chat_group":             publicHome.ChatGroup,
+		"public_chat_endpoint":          ratio_setting.GetGroupPolicy(publicHome.ChatGroup).Endpoint,
+		"public_chat_routing_mode":      publicHome.ChatRoutingMode,
+		"public_chat_model":             publicHome.ChatModel,
+		"public_api_group":              publicApiGroup,
+		"public_api_endpoint":           publicApiPolicy.Endpoint,
+		"public_api_require_key":        publicApiRequireKey,
+		"public_api_allow_no_model":     publicApiPolicy.AllowNoModel,
+		"public_api_has_fallback":       publicApiHasFallback,
+		"public_stats_enabled":          publicHome.StatsEnabled,
 
 		"password_login_encryption_enabled": common.PasswordLoginEncryptionEnabled,
 

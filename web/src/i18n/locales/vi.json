@@ -7437,6 +7437,23 @@
     "Public chat model": "Public chat model",
     "Only models enabled in the selected group can be used.": "Only models enabled in the selected group can be used.",
     "Enable requests without a model in this group policy first.": "Enable requests without a model in this group policy first.",
+    "API access": "Truy cập API",
+    "Use the configured API base and compatible routes.": "Sử dụng API Base và các endpoint tương thích đã cấu hình.",
+    "API Base": "API Base",
+    "Copy API Base": "Sao chép API Base",
+    "Compatible endpoints": "Endpoint tương thích",
+    "Group": "Nhóm",
+    "Fallback policy": "Chính sách fallback",
+    "Reasoning fields": "Trường suy luận",
+    "Reasoning output fields depend on the selected model and endpoint. Common fields include reasoning, thinking, and reasoning_content.": "Các trường suy luận phụ thuộc vào model và endpoint. Các trường thường gặp gồm reasoning, thinking và reasoning_content.",
+    "Homepage API reference group": "Nhóm tham chiếu API trên trang chủ",
+    "The homepage API reference uses this group to describe API key, model selection, and fallback behavior.": "Mục tham chiếu API trên trang chủ dùng nhóm này để mô tả API key, cách chọn model và hành vi fallback.",
+    "Any API key value or an empty key works for requests.": "Có thể nhập bất kỳ giá trị API key nào hoặc để trống để gửi request.",
+    "A valid API key is required for requests.": "Cần API key hợp lệ để gửi request.",
+    "Similar model names are supported; omit the model name to select automatically.": "Hỗ trợ khớp tên model tương tự; bỏ trống tên model để tự động chọn.",
+    "A model name is required for requests.": "Cần cung cấp tên model khi gửi request.",
+    "Automatically switches to another model after a model failure.": "Tự động chuyển sang model khác khi model gặp lỗi.",
+    "No automatic model fallback is configured.": "Chưa cấu hình tự động chuyển model dự phòng.",
     "Group policy configuration is invalid.": "Group policy configuration is invalid."
   }
 }

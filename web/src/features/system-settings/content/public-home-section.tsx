@@ -59,6 +59,7 @@ const publicHomeSchema = z.object({
   PublicChatGroup: z.string().max(100),
   PublicChatRoutingMode: z.enum(['group', 'model']),
   PublicChatModel: z.string().max(200),
+  PublicApiGroup: z.string().max(100),
   PublicStatsRequestAdjustment: z.number().int(),
   GroupRatio: z.string(),
   UserUsableGroups: z.string(),
@@ -330,6 +331,34 @@ export function PublicHomeSection(props: PublicHomeSectionProps) {
               )}
             />
           </div>
+          <FormField
+            control={form.control}
+            name='PublicApiGroup'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Homepage API reference group')}</FormLabel>
+                <FormControl>
+                  <Combobox
+                    options={groupOptions.map((group) => ({
+                      value: group,
+                      label: group,
+                    }))}
+                    value={field.value || null}
+                    onValueChange={(value) => field.onChange(value ?? '')}
+                    placeholder={t('Select a group')}
+                    aria-label={t('Homepage API reference group')}
+                    className='w-full'
+                  />
+                </FormControl>
+                <FormDescription>
+                  {t(
+                    'The homepage API reference uses this group to describe API key, model selection, and fallback behavior.'
+                  )}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           {routingMode === 'model' && (
             <FormField
               control={form.control}

@@ -41,6 +41,7 @@ const defaultContentSettings: ContentSettings = {
   PublicChatGroup: '',
   PublicChatRoutingMode: 'group',
   PublicChatModel: '',
+  PublicApiGroup: 'default',
   PublicStatsRequestAdjustment: 0,
   GroupRatio: '{}',
   UserUsableGroups: '{}',

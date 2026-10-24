@@ -7437,6 +7437,23 @@
     "Public chat model": "Public chat model",
     "Only models enabled in the selected group can be used.": "Only models enabled in the selected group can be used.",
     "Enable requests without a model in this group policy first.": "Enable requests without a model in this group policy first.",
+    "API access": "Доступ к API",
+    "Use the configured API base and compatible routes.": "Используйте настроенный базовый URL API и совместимые маршруты.",
+    "API Base": "Базовый URL API",
+    "Copy API Base": "Скопировать базовый URL API",
+    "Compatible endpoints": "Совместимые конечные точки",
+    "Group": "Группа",
+    "Fallback policy": "Политика резервирования",
+    "Reasoning fields": "Поля рассуждения",
+    "Reasoning output fields depend on the selected model and endpoint. Common fields include reasoning, thinking, and reasoning_content.": "Поля вывода рассуждений зависят от модели и конечной точки. Обычно используются reasoning, thinking и reasoning_content.",
+    "Homepage API reference group": "Группа для справки API на главной странице",
+    "The homepage API reference uses this group to describe API key, model selection, and fallback behavior.": "Справка API на главной странице использует эту группу для описания API-ключа, выбора модели и поведения при переключении.",
+    "Any API key value or an empty key works for requests.": "Для запросов подходит любое значение API-ключа или пустое поле.",
+    "A valid API key is required for requests.": "Для запросов требуется действительный API-ключ.",
+    "Similar model names are supported; omit the model name to select automatically.": "Поддерживаются похожие названия моделей; не указывайте имя модели для автоматического выбора.",
+    "A model name is required for requests.": "Для запросов требуется указать имя модели.",
+    "Automatically switches to another model after a model failure.": "При сбое модели автоматически переключается на другую.",
+    "No automatic model fallback is configured.": "Автоматическое переключение модели не настроено.",
     "Group policy configuration is invalid.": "Group policy configuration is invalid."
   }
 }

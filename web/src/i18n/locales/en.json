@@ -7437,6 +7437,23 @@
     "Public chat model": "Public chat model",
     "Only models enabled in the selected group can be used.": "Only models enabled in the selected group can be used.",
     "Enable requests without a model in this group policy first.": "Enable requests without a model in this group policy first.",
+    "API access": "API access",
+    "Use the configured API base and compatible routes.": "Use the configured API base and compatible routes.",
+    "API Base": "API Base",
+    "Copy API Base": "Copy API Base",
+    "Compatible endpoints": "Compatible endpoints",
+    "Group": "Group",
+    "Fallback policy": "Fallback policy",
+    "Reasoning fields": "Reasoning fields",
+    "Reasoning output fields depend on the selected model and endpoint. Common fields include reasoning, thinking, and reasoning_content.": "Reasoning output fields depend on the selected model and endpoint. Common fields include reasoning, thinking, and reasoning_content.",
+    "Homepage API reference group": "Homepage API reference group",
+    "The homepage API reference uses this group to describe API key, model selection, and fallback behavior.": "The homepage API reference uses this group to describe API key, model selection, and fallback behavior.",
+    "Any API key value or an empty key works for requests.": "Any API key value or an empty key works for requests.",
+    "A valid API key is required for requests.": "A valid API key is required for requests.",
+    "Similar model names are supported; omit the model name to select automatically.": "Similar model names are supported; omit the model name to select automatically.",
+    "A model name is required for requests.": "A model name is required for requests.",
+    "Automatically switches to another model after a model failure.": "Automatically switches to another model after a model failure.",
+    "No automatic model fallback is configured.": "No automatic model fallback is configured.",
     "Group policy configuration is invalid.": "Group policy configuration is invalid."
   }
 }
