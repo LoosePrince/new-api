@@ -53,13 +53,7 @@ export interface PublicRuntimeStatsResponse {
   data?: PublicRuntimeStats
 }
 
-export interface PublicChatResponse {
-  choices?: Array<{
-    message?: {
-      content?: string
-    }
-  }>
-  error?: {
-    message?: string
-  }
+export interface PublicChatStreamChunk {
+  content?: string
+  model?: string
 }

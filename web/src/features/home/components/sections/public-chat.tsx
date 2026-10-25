@@ -29,6 +29,7 @@ type ChatMessage = {
   id: number
   role: 'user' | 'assistant'
   content: string
+  model?: string
 }
 
 export function PublicChat() {
@@ -37,6 +38,9 @@ export function PublicChat() {
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isSending, setIsSending] = useState(false)
+  const [streamingMessageId, setStreamingMessageId] = useState<number | null>(
+    null
+  )
   const messageId = useRef(0)
   const enabled = status?.public_chat_enabled === true
   const endpoint =
@@ -63,11 +67,21 @@ export function PublicChat() {
       ...messages,
       { id: ++messageId.current, role: 'user' as const, content },
     ]
-    setMessages(nextMessages)
+    const assistantId = ++messageId.current
+    const assistantMessage: ChatMessage = {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+    }
+    setMessages([...nextMessages, assistantMessage])
     setInput('')
     setIsSending(true)
+    setStreamingMessageId(assistantId)
+
+    let assistantContent = ''
+    let assistantModel = ''
     try {
-      const response = await sendPublicChatMessage(
+      await sendPublicChatMessage(
         endpoint,
         group,
         routingMode,
@@ -75,28 +89,34 @@ export function PublicChat() {
         nextMessages.map(({ role, content: messageContent }) => ({
           role,
           content: messageContent,
-        }))
+        })),
+        (chunk) => {
+          if (chunk.content) assistantContent += chunk.content
+          if (chunk.model) assistantModel = chunk.model
+          if (!chunk.content && !chunk.model) return
+
+          setMessages((currentMessages) =>
+            currentMessages.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    content: assistantContent,
+                    ...(assistantModel ? { model: assistantModel } : {}),
+                  }
+                : message
+            )
+          )
+        }
       )
-      const assistantContent = response.choices?.[0]?.message?.content
       if (!assistantContent) {
-        throw new Error(
-          response.error?.message ||
-            t('The public chat returned an empty response.')
-        )
+        throw new Error(t('The public chat returned an empty response.'))
       }
-      setMessages([
-        ...nextMessages,
-        {
-          id: ++messageId.current,
-          role: 'assistant',
-          content: assistantContent,
-        },
-      ])
     } catch (error) {
       setMessages(messages)
       handleServerError(error, t('Unable to reach the public chat.'))
     } finally {
       setIsSending(false)
+      setStreamingMessageId(null)
     }
   }
 
@@ -143,15 +163,18 @@ export function PublicChat() {
                       : 'border-border/50 bg-background max-w-[85%] rounded-lg border px-3 py-2 text-sm leading-6'
                   }
                 >
-                  {message.content}
+                  {message.content ||
+                    (message.id === streamingMessageId
+                      ? t('Thinking...')
+                      : null)}
+                  {message.role === 'assistant' && message.model ? (
+                    <div className='text-muted-foreground mt-2 text-xs'>
+                      {t('Model {{model}}', { model: message.model })}
+                    </div>
+                  ) : null}
                 </div>
               ))
             )}
-            {isSending ? (
-              <div className='text-muted-foreground max-w-[85%] rounded-lg px-3 py-2 text-sm'>
-                {t('Thinking...')}
-              </div>
-            ) : null}
           </div>
           <form onSubmit={onSubmit} className='border-border/50 border-t p-4'>
             <label htmlFor='public-chat-input' className='sr-only'>

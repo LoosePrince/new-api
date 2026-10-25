@@ -15,23 +15,27 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { PublicChatStreamChunk } from '../../../types'
 import { PublicChat } from '../public-chat'
 
 const statusHook = vi.hoisted(() => vi.fn())
+const sendPublicChatMessage = vi.hoisted(() => vi.fn())
 
 vi.mock('@/hooks/use-status', () => ({
   useStatus: statusHook,
 }))
 
 vi.mock('../../../api', () => ({
-  sendPublicChatMessage: vi.fn(),
+  sendPublicChatMessage,
 }))
 
 describe('public chat availability', () => {
   beforeEach(() => {
     statusHook.mockReset()
+    sendPublicChatMessage.mockReset()
   })
 
   it('enables the composer when status exposes public chat as enabled', () => {
@@ -52,5 +56,37 @@ describe('public chat availability', () => {
     render(<PublicChat />)
 
     expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled()
+  })
+
+  it('renders streamed assistant text and the model returned by the route', async () => {
+    statusHook.mockReturnValue({
+      status: {
+        public_chat_enabled: true,
+        public_chat_group: 'public',
+      },
+    })
+    sendPublicChatMessage.mockImplementation(
+      async (
+        _endpoint: string,
+        _group: string,
+        _routingMode: string,
+        _model: string,
+        _messages: unknown[],
+        onChunk: (chunk: PublicChatStreamChunk) => void
+      ) => {
+        onChunk({ content: 'Hello', model: 'routed-model' })
+        await Promise.resolve()
+        onChunk({ content: ' there' })
+      }
+    )
+
+    const user = userEvent.setup()
+    render(<PublicChat />)
+
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Hi')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(await screen.findByText('Hello there')).toBeInTheDocument()
+    expect(screen.getByText('Model routed-model')).toBeInTheDocument()
   })
 })

@@ -20,7 +20,7 @@ import { api } from '@/lib/api'
 
 import type {
   HomePageContentResponse,
-  PublicChatResponse,
+  PublicChatStreamChunk,
   PublicRuntimeStatsResponse,
 } from './types'
 
@@ -52,22 +52,103 @@ export async function sendPublicChatMessage(
   group: string,
   routingMode: 'group' | 'model',
   model: string,
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>
-): Promise<PublicChatResponse> {
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+  onChunk: (chunk: PublicChatStreamChunk) => void
+): Promise<void> {
   const normalizedEndpoint = endpoint.trim().replace(/\/+$/, '')
   const path = `${normalizedEndpoint || ''}/v1/chat/completions`
-  const headers =
-    routingMode === 'group'
-      ? { 'X-Group': group }
-      : { 'X-Group': group, 'X-Public-Chat-Model': model }
-  const res = await api.post(
-    path,
-    { messages, stream: false },
-    {
-      headers,
-      skipAuthorization: true,
-      skipErrorHandler: true,
+  const headers: Record<string, string> = {
+    Accept: 'text/event-stream',
+    'Content-Type': 'application/json',
+    'X-Group': group,
+  }
+  if (routingMode === 'model') {
+    headers['X-Public-Chat-Model'] = model
+  }
+  const response = await fetch(path, {
+    method: 'POST',
+    credentials: 'include',
+    headers,
+    body: JSON.stringify({ messages, stream: true }),
+  })
+
+  if (!response.ok) {
+    let message = `Public chat request failed (${response.status})`
+    try {
+      const payload = (await response.json()) as {
+        error?: { message?: unknown }
+        message?: unknown
+      }
+      const serverMessage = payload.error?.message ?? payload.message
+      if (typeof serverMessage === 'string' && serverMessage) {
+        message = serverMessage
+      }
+    } catch {
+      // Keep the status-based error when the response is not JSON.
     }
-  )
-  return res.data
+    throw new Error(message)
+  }
+
+  if (!response.body) {
+    throw new Error('The public chat did not return a readable stream.')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let readerDone = false
+  let doneReceived = false
+
+  const processEvent = (event: string): boolean => {
+    const data = event
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trimStart())
+      .join('\n')
+      .trim()
+
+    if (!data) return false
+    if (data === '[DONE]') return true
+
+    const payload = JSON.parse(data) as {
+      model?: unknown
+      choices?: Array<{
+        delta?: { content?: unknown }
+      }>
+      error?: { message?: unknown }
+    }
+    const errorMessage = payload.error?.message
+    if (typeof errorMessage === 'string' && errorMessage) {
+      throw new Error(errorMessage)
+    }
+
+    const content = payload.choices?.[0]?.delta?.content
+    onChunk({
+      content: typeof content === 'string' ? content : undefined,
+      model: typeof payload.model === 'string' ? payload.model : undefined,
+    })
+    return false
+  }
+
+  while (!readerDone && !doneReceived) {
+    const result = await reader.read()
+    if (result.done) {
+      buffer += decoder.decode()
+      readerDone = true
+    } else {
+      buffer += decoder.decode(result.value, { stream: true })
+    }
+
+    const events = buffer.split(/\r?\n\r?\n/)
+    buffer = events.pop() || ''
+    for (const event of events) {
+      if (processEvent(event)) {
+        doneReceived = true
+        break
+      }
+    }
+    if (doneReceived && !result.done) await reader.cancel()
+  }
+
+  if (!doneReceived && buffer.trim()) processEvent(buffer)
 }
