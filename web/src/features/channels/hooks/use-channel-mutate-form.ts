@@ -29,7 +29,12 @@ import { handleServerError } from '@/lib/handle-server-error'
 import { createServerError } from '@/lib/server-error-message'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { createChannel, updateChannel } from '../api'
+import {
+  createChannel,
+  createContributorChannel,
+  updateChannel,
+  updateContributorChannel,
+} from '../api'
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
 import {
   transformFormDataToCreatePayload,
@@ -42,6 +47,7 @@ type UseChannelMutateFormParams = {
   currentRow?: Channel | null
   isEditing: boolean
   isMultiKeyChannel: boolean
+  contributorMode?: boolean
   onSuccess: () => void
 }
 
@@ -76,12 +82,19 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
         if (!data.key?.trim()) {
           delete payload.key
         }
-        if (!canEditSensitive) {
+        if (!canEditSensitive && !props.contributorMode) {
           for (const field of SENSITIVE_UPDATE_FIELDS) {
             delete payload[field]
           }
         }
+        if (props.contributorMode) {
+          delete payload.group
+          delete payload.priority
+          delete payload.weight
+          delete payload.status
+        }
         const payloadWithKeyMode =
+          !props.contributorMode &&
           canEditSensitive &&
           props.isMultiKeyChannel &&
           data.key?.trim() &&
@@ -92,9 +105,14 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
               }
             : payload
 
-        const response = await updateChannel(props.currentRow.id, {
+        const update = props.contributorMode
+          ? updateContributorChannel
+          : updateChannel
+        const response = await update(props.currentRow.id, {
           ...payloadWithKeyMode,
-          ...(canEditSensitive && props.isMultiKeyChannel
+          ...(!props.contributorMode &&
+          canEditSensitive &&
+          props.isMultiKeyChannel
             ? { multi_key_mode: data.multi_key_type }
             : {}),
         })
@@ -105,7 +123,17 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
       }
 
       const payload = transformFormDataToCreatePayload(data)
-      const response = await createChannel(payload)
+      const create = props.contributorMode
+        ? createContributorChannel
+        : createChannel
+      if (props.contributorMode) {
+        payload.mode = 'single'
+        payload.channel.status = 2
+        payload.channel.group = 'default'
+        delete payload.multi_key_mode
+        delete payload.batch_add_set_key_prefix_2_name
+      }
+      const response = await create(payload)
       if (!response.success) {
         throw createServerError(response, t(ERROR_MESSAGES.CREATE_FAILED))
       }

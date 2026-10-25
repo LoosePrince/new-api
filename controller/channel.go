@@ -188,6 +188,16 @@ func GetChannelDefaultBaseURLs(c *gin.Context) {
 	common.ApiSuccess(c, baseURLs)
 }
 
+func annotateContributor(channel *model.Channel) {
+	if channel == nil || channel.ContributorId <= 0 {
+		return
+	}
+	username, err := model.GetUsernameById(channel.ContributorId, false)
+	if err == nil {
+		channel.ContributorUsername = username
+	}
+}
+
 func GetAllChannels(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	channelData := make([]*model.Channel, 0)
@@ -258,6 +268,7 @@ func GetAllChannels(c *gin.Context) {
 
 	for _, datum := range channelData {
 		clearChannelInfo(datum)
+		annotateContributor(datum)
 	}
 
 	countQuery := buildChannelListQuery(groupFilter, statusFilter, -1)
@@ -453,6 +464,7 @@ func SearchChannels(c *gin.Context) {
 
 	for _, datum := range pagedData {
 		clearChannelInfo(datum)
+		annotateContributor(datum)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -480,6 +492,7 @@ func GetChannel(c *gin.Context) {
 	}
 	if channel != nil {
 		clearChannelInfo(channel)
+		annotateContributor(channel)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -737,6 +750,29 @@ func AddChannel(c *gin.Context) {
 		return
 	}
 
+	if c.GetBool("contributor_channel") {
+		if addChannelRequest.Mode != "single" ||
+			addChannelRequest.MultiKeyMode != "" ||
+			addChannelRequest.BatchAddSetKeyPrefix2Name {
+			common.ApiErrorT(c, "Contributors can only create single-key channels")
+			return
+		}
+		if addChannelRequest.Channel == nil {
+			common.ApiErrorT(c, "Invalid parameters")
+			return
+		}
+		if addChannelRequest.Channel.Type == constant.ChannelTypeTaskPlugin ||
+			len(addChannelRequest.Channel.GetSetting().TaskPluginBindings()) > 0 {
+			common.ApiErrorT(c, "Contributors cannot use task plugin channels")
+			return
+		}
+		if strings.TrimSpace(addChannelRequest.Channel.Group) != "" &&
+			strings.TrimSpace(addChannelRequest.Channel.Group) != "default" {
+			common.ApiErrorT(c, "Contributors cannot configure channel groups")
+			return
+		}
+	}
+
 	// Binding a plugin needs the same permission on a New API channel as the
 	// type-61 channel dedicated to it.
 	if addChannelRequest.Channel != nil &&
@@ -758,6 +794,14 @@ func AddChannel(c *gin.Context) {
 		return
 	}
 
+	if c.GetBool("contributor_channel") {
+		addChannelRequest.Channel.ContributorId = c.GetInt("id")
+		addChannelRequest.Channel.Status = common.ChannelStatusManuallyDisabled
+		addChannelRequest.Channel.Group = "default"
+		addChannelRequest.Channel.ChannelInfo = model.ChannelInfo{}
+		addChannelRequest.Channel.Priority = common.GetPointer[int64](0)
+		addChannelRequest.Channel.Weight = common.GetPointer[uint](0)
+	}
 	addChannelRequest.Channel.CreatedTime = common.GetTimestamp()
 	keys := make([]string, 0)
 	switch addChannelRequest.Mode {
@@ -1086,6 +1130,40 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 	clearChannelReadOnlyFields(&channel, requestData)
+	contributorChannel := c.GetBool("contributor_channel")
+	var originChannel *model.Channel
+	if contributorChannel {
+		for field := range requestData {
+			if _, ok := contributorEditableChannelFields[field]; !ok {
+				common.ApiErrorT(c, "Invalid parameters")
+				return
+			}
+		}
+		if _, ok := requestData["group"]; ok {
+			common.ApiErrorT(c, "Contributors cannot configure channel groups")
+			return
+		}
+		if _, ok := requestData["status"]; ok {
+			common.ApiErrorT(c, "Contributors cannot configure channel status")
+			return
+		}
+		originChannel, err = model.GetContributorChannel(c.GetInt("id"), channel.Id, true)
+		if err != nil {
+			common.ApiErrorT(c, "Channel does not exist")
+			return
+		}
+		if err := mergeContributorChannelPatch(&channel, originChannel, requestData); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		if channel.Type == constant.ChannelTypeTaskPlugin ||
+			len(channel.GetSetting().TaskPluginBindings()) > 0 {
+			common.ApiErrorT(c, "Contributors cannot use task plugin channels")
+			return
+		}
+		channel.ContributorId = originChannel.ContributorId
+		channel.Status = originChannel.Status
+	}
 
 	if channel.Type == constant.ChannelTypeTaskPlugin &&
 		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.TaskPluginBind) {
@@ -1104,10 +1182,12 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 	// Preserve existing ChannelInfo to ensure multi-key channels keep correct state even if the client does not send ChannelInfo in the request.
-	originChannel, err := model.GetChannelById(channel.Id, true)
-	if err != nil {
-		common.ApiError(c, err)
-		return
+	if !contributorChannel {
+		originChannel, err = model.GetChannelById(channel.Id, true)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 	originProxy := originChannel.GetSetting().Proxy
 	proxyChanged := false
@@ -1132,8 +1212,37 @@ func UpdateChannel(c *gin.Context) {
 
 	// Always copy the original ChannelInfo so that fields like IsMultiKey and MultiKeySize are retained.
 	channel.ChannelInfo = originChannel.ChannelInfo
+	if contributorChannel {
+		configurationChanged := false
+		if _, provided := requestData["type"]; provided && channel.Type != originChannel.Type {
+			configurationChanged = true
+		}
+		if _, provided := requestData["key"]; provided && channel.Key != originChannel.Key {
+			configurationChanged = true
+		}
+		if _, provided := requestData["openai_organization"]; provided && !equalStringPtr(channel.OpenAIOrganization, originChannel.OpenAIOrganization) {
+			configurationChanged = true
+		}
+		if _, provided := requestData["base_url"]; provided {
+			configurationChanged = configurationChanged || !equalStringPtr(channel.BaseURL, originChannel.BaseURL)
+		}
+		if _, provided := requestData["setting"]; provided {
+			configurationChanged = configurationChanged || !equalStringPtr(channel.Setting, originChannel.Setting)
+		}
+		if _, provided := requestData["settings"]; provided {
+			configurationChanged = configurationChanged || channel.OtherSettings != originChannel.OtherSettings
+		}
+		for _, field := range []string{"other", "param_override", "header_override", "status_code_mapping"} {
+			if _, provided := requestData[field]; provided && channelFieldChanged(&channel, originChannel, field) {
+				configurationChanged = true
+			}
+		}
+		if configurationChanged {
+			channel.Status = common.ChannelStatusManuallyDisabled
+		}
+	}
 
-	if channelHasSensitiveChanges(&channel, originChannel, requestData) &&
+	if !contributorChannel && channelHasSensitiveChanges(&channel, originChannel, requestData) &&
 		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.ChannelSensitiveWrite) {
 		common.ApiErrorT(c, "Unauthorized, insufficient privileges")
 		return
@@ -1225,6 +1334,12 @@ func UpdateChannel(c *gin.Context) {
 	if err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	if contributorChannel && channel.Status == common.ChannelStatusManuallyDisabled {
+		if _, err := model.DisableContributorChannel(c.GetInt("id"), channel.Id); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 	model.InitChannelCache()
 	if proxyChanged {
@@ -1356,11 +1471,18 @@ type fetchModelsRequest struct {
 }
 
 func buildAdvancedCustomModelPreviewChannel(req fetchModelsRequest) (*model.Channel, error) {
+	return buildAdvancedCustomModelPreviewChannelFromSaved(req, nil)
+}
+
+func buildAdvancedCustomModelPreviewChannelFromSaved(req fetchModelsRequest, savedChannel *model.Channel) (*model.Channel, error) {
 	var channel *model.Channel
 	if req.ChannelID > 0 {
-		savedChannel, err := model.GetChannelById(req.ChannelID, true)
-		if err != nil {
-			return nil, err
+		if savedChannel == nil {
+			var err error
+			savedChannel, err = model.GetChannelById(req.ChannelID, true)
+			if err != nil {
+				return nil, err
+			}
 		}
 		if savedChannel.Type != constant.ChannelTypeAdvancedCustom {
 			return nil, fmt.Errorf("channel %d is not an advanced custom channel", req.ChannelID)
@@ -1423,6 +1545,48 @@ func buildAdvancedCustomModelPreviewChannel(req fetchModelsRequest) (*model.Chan
 	return channel, nil
 }
 
+func buildFetchModelsPreviewChannel(req fetchModelsRequest) (*model.Channel, error) {
+	return buildFetchModelsPreviewChannelFromSaved(req, nil)
+}
+
+func buildFetchModelsPreviewChannelFromSaved(req fetchModelsRequest, savedChannel *model.Channel) (*model.Channel, error) {
+	if req.Type == constant.ChannelTypeAdvancedCustom || req.ChannelID > 0 {
+		return buildAdvancedCustomModelPreviewChannelFromSaved(req, savedChannel)
+	}
+
+	baseURL := ""
+	if req.BaseURL != nil {
+		baseURL = strings.TrimSpace(*req.BaseURL)
+	}
+	if baseURL == "" {
+		baseURL = constant.GetChannelBaseURL(req.Type)
+	}
+
+	key := strings.TrimSpace(req.Key)
+	if req.Type != constant.ChannelTypeCodex {
+		key = strings.Split(key, "\n")[0]
+	}
+	return &model.Channel{
+		Type:    req.Type,
+		Key:     key,
+		BaseURL: &baseURL,
+	}, nil
+}
+
+func fetchModelsResponse(c *gin.Context, channel *model.Channel) {
+	models, err := fetchChannelUpstreamModelIDs(channel)
+	if err != nil {
+		err = sanitizeFetchModelsError(err, channel.Key)
+		common.ApiErrorT(c, "Failed to fetch models: {{error}}", map[string]any{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    models,
+	})
+}
+
 func FetchModels(c *gin.Context) {
 	var req fetchModelsRequest
 
@@ -1434,44 +1598,12 @@ func FetchModels(c *gin.Context) {
 		return
 	}
 
-	var channel *model.Channel
-	if req.Type == constant.ChannelTypeAdvancedCustom || req.ChannelID > 0 {
-		var err error
-		channel, err = buildAdvancedCustomModelPreviewChannel(req)
-		if err != nil {
-			common.ApiError(c, err)
-			return
-		}
-	} else {
-		baseURL := ""
-		if req.BaseURL != nil {
-			baseURL = strings.TrimSpace(*req.BaseURL)
-		}
-		if baseURL == "" {
-			baseURL = constant.GetChannelBaseURL(req.Type)
-		}
-
-		key := strings.TrimSpace(req.Key)
-		if req.Type != constant.ChannelTypeCodex {
-			key = strings.Split(key, "\n")[0]
-		}
-		channel = &model.Channel{
-			Type:    req.Type,
-			Key:     key,
-			BaseURL: &baseURL,
-		}
-	}
-
-	models, err := fetchChannelUpstreamModelIDs(channel)
+	channel, err := buildFetchModelsPreviewChannel(req)
 	if err != nil {
-		common.ApiErrorT(c, "Failed to fetch models: {{error}}", map[string]any{"error": err.Error()})
+		common.ApiError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    models,
-	})
+	fetchModelsResponse(c, channel)
 }
 
 func BatchSetChannelTag(c *gin.Context) {

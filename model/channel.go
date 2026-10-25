@@ -22,25 +22,27 @@ import (
 )
 
 type Channel struct {
-	Id                 int     `json:"id"`
-	Type               int     `json:"type" gorm:"default:0"`
-	Key                string  `json:"key" gorm:"not null"`
-	OpenAIOrganization *string `json:"openai_organization"`
-	TestModel          *string `json:"test_model"`
-	Status             int     `json:"status" gorm:"default:1"`
-	Name               string  `json:"name" gorm:"index"`
-	Weight             *uint   `json:"weight" gorm:"default:0"`
-	CreatedTime        int64   `json:"created_time" gorm:"bigint"`
-	TestTime           int64   `json:"test_time" gorm:"bigint"`
-	ResponseTime       int     `json:"response_time"` // in milliseconds
-	BaseURL            *string `json:"base_url" gorm:"column:base_url;default:''"`
-	Other              string  `json:"other"`
-	Balance            float64 `json:"balance"` // in USD
-	BalanceUpdatedTime int64   `json:"balance_updated_time" gorm:"bigint"`
-	Models             string  `json:"models"`
-	Group              string  `json:"group" gorm:"type:varchar(64);default:'default'"`
-	UsedQuota          int64   `json:"used_quota" gorm:"bigint;default:0"`
-	ModelMapping       *string `json:"model_mapping" gorm:"type:text"`
+	Id                  int     `json:"id"`
+	ContributorId       int     `json:"-" gorm:"index;default:0"`
+	ContributorUsername string  `json:"contributor_username,omitempty" gorm:"-"`
+	Type                int     `json:"type" gorm:"default:0"`
+	Key                 string  `json:"key" gorm:"not null"`
+	OpenAIOrganization  *string `json:"openai_organization"`
+	TestModel           *string `json:"test_model"`
+	Status              int     `json:"status" gorm:"default:1"`
+	Name                string  `json:"name" gorm:"index"`
+	Weight              *uint   `json:"weight" gorm:"default:0"`
+	CreatedTime         int64   `json:"created_time" gorm:"bigint"`
+	TestTime            int64   `json:"test_time" gorm:"bigint"`
+	ResponseTime        int     `json:"response_time"` // in milliseconds
+	BaseURL             *string `json:"base_url" gorm:"column:base_url;default:''"`
+	Other               string  `json:"other"`
+	Balance             float64 `json:"balance"` // in USD
+	BalanceUpdatedTime  int64   `json:"balance_updated_time" gorm:"bigint"`
+	Models              string  `json:"models"`
+	Group               string  `json:"group" gorm:"type:varchar(64);default:'default'"`
+	UsedQuota           int64   `json:"used_quota" gorm:"bigint;default:0"`
+	ModelMapping        *string `json:"model_mapping" gorm:"type:text"`
 	//MaxInputTokens     *int    `json:"max_input_tokens" gorm:"default:0"`
 	StatusCodeMapping *string `json:"status_code_mapping" gorm:"type:varchar(1024);default:''"`
 	Priority          *int64  `json:"priority" gorm:"bigint;default:0"`
@@ -58,6 +60,66 @@ type Channel struct {
 
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
+}
+
+func GetContributorChannels(contributorID, offset, limit int) ([]*Channel, int64, error) {
+	var channels []*Channel
+	var total int64
+	query := DB.Model(&Channel{}).Where("contributor_id = ?", contributorID)
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := query.Order("id desc").Offset(offset).Limit(limit).Omit("key").Find(&channels).Error
+	return channels, total, err
+}
+
+func GetContributorChannel(contributorID, channelID int, includeKey bool) (*Channel, error) {
+	channel := &Channel{}
+	query := DB.Where("id = ? AND contributor_id = ?", channelID, contributorID)
+	if !includeKey {
+		query = query.Omit("key")
+	}
+	if err := query.First(channel).Error; err != nil {
+		return nil, err
+	}
+	return channel, nil
+}
+
+func DisableContributorChannel(contributorID, channelID int) (bool, error) {
+	result := DB.Model(&Channel{}).
+		Where("id = ? AND contributor_id = ? AND status <> ?", channelID, contributorID, common.ChannelStatusManuallyDisabled).
+		Update("status", common.ChannelStatusManuallyDisabled)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	if result.RowsAffected == 0 {
+		var channel Channel
+		if err := DB.Select("id").Where("id = ? AND contributor_id = ?", channelID, contributorID).First(&channel).Error; err != nil {
+			return false, err
+		}
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func DeleteContributorChannel(contributorID, channelID int) error {
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	result := tx.Where("id = ? AND contributor_id = ?", channelID, contributorID).Delete(&Channel{})
+	if result.Error != nil {
+		tx.Rollback()
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		tx.Rollback()
+		return gorm.ErrRecordNotFound
+	}
+	if err := tx.Where("channel_id = ?", channelID).Delete(&Ability{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit().Error
 }
 
 const ChannelStatusReasonAllKeysDisabled = "All keys are disabled"

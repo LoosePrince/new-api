@@ -1,6 +1,65 @@
 package controller
 
-import "github.com/QuantumNous/new-api/model"
+import (
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
+)
+
+var contributorEditableChannelFields = map[string]struct{}{
+	"id":                  {},
+	"type":                {},
+	"key":                 {},
+	"openai_organization": {},
+	"test_model":          {},
+	"name":                {},
+	"base_url":            {},
+	"other":               {},
+	"models":              {},
+	"model_mapping":       {},
+	"status_code_mapping": {},
+	"auto_ban":            {},
+	"other_info":          {},
+	"tag":                 {},
+	"setting":             {},
+	"param_override":      {},
+	"header_override":     {},
+	"remark":              {},
+	"settings":            {},
+}
+
+func mergeContributorChannelPatch(channel *PatchChannel, origin *model.Channel, requestData map[string]any) error {
+	originData, err := common.Marshal(origin)
+	if err != nil {
+		return err
+	}
+	mergedData := make(map[string]any)
+	if err := common.Unmarshal(originData, &mergedData); err != nil {
+		return err
+	}
+	for field, value := range requestData {
+		mergedData[field] = value
+	}
+	mergedDataBytes, err := common.Marshal(mergedData)
+	if err != nil {
+		return err
+	}
+	return common.Unmarshal(mergedDataBytes, channel)
+}
+
+func channelFieldChanged(channel *PatchChannel, origin *model.Channel, field string) bool {
+	switch field {
+	case "other":
+		return channel.Other != origin.Other
+	case "param_override":
+		return !equalStringPtr(channel.ParamOverride, origin.ParamOverride)
+	case "header_override":
+		return !equalStringPtr(channel.HeaderOverride, origin.HeaderOverride)
+	case "status_code_mapping":
+		return !equalStringPtr(channel.StatusCodeMapping, origin.StatusCodeMapping)
+	default:
+		return false
+	}
+}
 
 func channelHasSensitiveChanges(channel *PatchChannel, origin *model.Channel, requestData map[string]any) bool {
 	if _, ok := requestData["type"]; ok && channel.Type != origin.Type {
@@ -82,6 +141,8 @@ var channelOperationalFields = map[string]struct{}{
 // channelReadOnlyFields lists server-managed/accounting fields that the general
 // channel edit endpoint must ignore even if a client sends them.
 var channelReadOnlyFields = map[string]struct{}{
+	"contributor_id":       {},
+	"contributor_username": {},
 	"created_time":         {},
 	"test_time":            {},
 	"response_time":        {},

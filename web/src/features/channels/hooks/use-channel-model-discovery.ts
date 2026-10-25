@@ -20,7 +20,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { createServerError } from '@/lib/server-error-message'
 
-import { fetchModels, fetchUpstreamModels } from '../api'
+import {
+  fetchContributorModels,
+  fetchContributorUpstreamModels,
+  fetchModels,
+  fetchUpstreamModels,
+} from '../api'
 
 type DiscoveryState = {
   status: 'idle' | 'loading' | 'success' | 'error' | 'stale'
@@ -35,6 +40,7 @@ export type ChannelModelDiscoveryRequest =
 type ChannelModelDiscoveryProps = {
   enabled: boolean
   request: ChannelModelDiscoveryRequest
+  contributorMode?: boolean
 }
 
 export function useChannelModelDiscovery(props: ChannelModelDiscoveryProps) {
@@ -54,17 +60,23 @@ export function useChannelModelDiscovery(props: ChannelModelDiscoveryProps) {
     return () => {
       sequence.current += 1
     }
-  }, [props.enabled, props.request])
+  }, [props.contributorMode, props.enabled, props.request])
 
   const fetch = useCallback(async () => {
     if (!props.enabled) return
     const requestSequence = ++sequence.current
     setState((previous) => ({ status: 'loading', models: previous.models }))
     try {
-      const response =
-        props.request.kind === 'saved'
-          ? await fetchUpstreamModels(props.request.channelId)
-          : await fetchModels(props.request.data)
+      let response
+      if (props.request.kind === 'saved') {
+        response = props.contributorMode
+          ? await fetchContributorUpstreamModels(props.request.channelId)
+          : await fetchUpstreamModels(props.request.channelId)
+      } else if (props.contributorMode) {
+        response = await fetchContributorModels(props.request.data)
+      } else {
+        response = await fetchModels(props.request.data)
+      }
       if (requestSequence !== sequence.current) return
       if (!response.success) {
         throw createServerError(response, 'Failed to fetch models')
@@ -78,7 +90,7 @@ export function useChannelModelDiscovery(props: ChannelModelDiscoveryProps) {
         error,
       }))
     }
-  }, [props.enabled, props.request])
+  }, [props.contributorMode, props.enabled, props.request])
 
   return { ...state, fetch }
 }

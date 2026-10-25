@@ -44,7 +44,10 @@ export const Route = createFileRoute('/_authenticated')({
       location.pathname !== '/profile' &&
       !location.pathname.startsWith('/profile/') &&
       location.pathname !== '/security' &&
-      !location.pathname.startsWith('/security/')
+      !location.pathname.startsWith('/security/') &&
+      location.pathname !== '/dashboard/overview' &&
+      location.pathname !== '/contributions' &&
+      location.pathname !== '/contributions/channels'
     ) {
       throw redirect({ to: '/profile' })
     }

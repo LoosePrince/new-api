@@ -27,6 +27,7 @@ import { Route as errors404RouteImport } from './routes/(errors)/404'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authenticated/chat2link'
+import { Route as AuthenticatedContributionsRouteImport } from './routes/_authenticated/contributions'
 import { Route as AuthenticatedSystemSettingsRouteRouteImport } from './routes/_authenticated/system-settings/route'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
@@ -36,6 +37,8 @@ import { Route as SetupIndexRouteImport } from './routes/setup/index'
 import { Route as authUserResetRouteImport } from './routes/(auth)/user/reset'
 import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels/index'
 import { Route as AuthenticatedChatChatIdRouteImport } from './routes/_authenticated/chat/$chatId'
+import { Route as AuthenticatedContributionsIndexRouteImport } from './routes/_authenticated/contributions/index'
+import { Route as AuthenticatedContributionsChannelsRouteImport } from './routes/_authenticated/contributions/channels'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedDashboardSectionRouteImport } from './routes/_authenticated/dashboard/$section'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
@@ -161,6 +164,12 @@ const AuthenticatedChat2linkRoute = AuthenticatedChat2linkRouteImport.update({
   path: '/chat2link',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedContributionsRoute =
+  AuthenticatedContributionsRouteImport.update({
+    id: '/contributions',
+    path: '/contributions',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSystemSettingsRouteRoute =
   AuthenticatedSystemSettingsRouteRouteImport.update({
     id: '/system-settings',
@@ -208,6 +217,18 @@ const AuthenticatedChatChatIdRoute = AuthenticatedChatChatIdRouteImport.update({
   path: '/chat/$chatId',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedContributionsIndexRoute =
+  AuthenticatedContributionsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedContributionsRoute,
+  } as any)
+const AuthenticatedContributionsChannelsRoute =
+  AuthenticatedContributionsChannelsRouteImport.update({
+    id: '/channels',
+    path: '/channels',
+    getParentRoute: () => AuthenticatedContributionsRoute,
+  } as any)
 const AuthenticatedDashboardIndexRoute =
   AuthenticatedDashboardIndexRouteImport.update({
     id: '/dashboard/',
@@ -440,6 +461,7 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
+  '/contributions': typeof AuthenticatedContributionsRouteWithChildren
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
   '/pricing/': typeof PricingIndexRoute
@@ -447,12 +469,14 @@ export interface FileRoutesByFullPath {
   '/setup/': typeof SetupIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
+  '/contributions/channels': typeof AuthenticatedContributionsChannelsRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/usage-logs/audit': typeof AuthenticatedUsageLogsAuditRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
+  '/contributions/': typeof AuthenticatedContributionsIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
@@ -509,12 +533,14 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
+  '/contributions/channels': typeof AuthenticatedContributionsChannelsRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/usage-logs/audit': typeof AuthenticatedUsageLogsAuditRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
+  '/contributions': typeof AuthenticatedContributionsIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/keys': typeof AuthenticatedKeysIndexRoute
   '/models': typeof AuthenticatedModelsIndexRoute
@@ -568,6 +594,7 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/_authenticated/chat2link': typeof AuthenticatedChat2linkRoute
+  '/_authenticated/contributions': typeof AuthenticatedContributionsRouteWithChildren
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
   '/pricing/': typeof PricingIndexRoute
@@ -575,12 +602,14 @@ export interface FileRoutesById {
   '/setup/': typeof SetupIndexRoute
   '/(auth)/user/reset': typeof authUserResetRoute
   '/_authenticated/chat/$chatId': typeof AuthenticatedChatChatIdRoute
+  '/_authenticated/contributions/channels': typeof AuthenticatedContributionsChannelsRoute
   '/_authenticated/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/models/$section': typeof AuthenticatedModelsSectionRoute
   '/_authenticated/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/_authenticated/usage-logs/audit': typeof AuthenticatedUsageLogsAuditRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
+  '/_authenticated/contributions/': typeof AuthenticatedContributionsIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
   '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
@@ -633,6 +662,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/chat2link'
+    | '/contributions'
     | '/oauth/$provider'
     | '/about/'
     | '/pricing/'
@@ -640,12 +670,14 @@ export interface FileRouteTypes {
     | '/setup/'
     | '/user/reset'
     | '/chat/$chatId'
+    | '/contributions/channels'
     | '/dashboard/$section'
     | '/errors/$error'
     | '/models/$section'
     | '/usage-logs/$section'
     | '/usage-logs/audit'
     | '/channels/'
+    | '/contributions/'
     | '/dashboard/'
     | '/keys/'
     | '/models/'
@@ -702,12 +734,14 @@ export interface FileRouteTypes {
     | '/setup'
     | '/user/reset'
     | '/chat/$chatId'
+    | '/contributions/channels'
     | '/dashboard/$section'
     | '/errors/$error'
     | '/models/$section'
     | '/usage-logs/$section'
     | '/usage-logs/audit'
     | '/channels'
+    | '/contributions'
     | '/dashboard'
     | '/keys'
     | '/models'
@@ -760,6 +794,7 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/_authenticated/chat2link'
+    | '/_authenticated/contributions'
     | '/oauth/$provider'
     | '/about/'
     | '/pricing/'
@@ -767,12 +802,14 @@ export interface FileRouteTypes {
     | '/setup/'
     | '/(auth)/user/reset'
     | '/_authenticated/chat/$chatId'
+    | '/_authenticated/contributions/channels'
     | '/_authenticated/dashboard/$section'
     | '/_authenticated/errors/$error'
     | '/_authenticated/models/$section'
     | '/_authenticated/usage-logs/$section'
     | '/_authenticated/usage-logs/audit'
     | '/_authenticated/channels/'
+    | '/_authenticated/contributions/'
     | '/_authenticated/dashboard/'
     | '/_authenticated/keys/'
     | '/_authenticated/models/'
@@ -953,6 +990,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChat2linkRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/contributions': {
+      id: '/_authenticated/contributions'
+      path: '/contributions'
+      fullPath: '/contributions'
+      preLoaderRoute: typeof AuthenticatedContributionsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/system-settings': {
       id: '/_authenticated/system-settings'
       path: '/system-settings'
@@ -1015,6 +1059,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/chat/$chatId'
       preLoaderRoute: typeof AuthenticatedChatChatIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/contributions/': {
+      id: '/_authenticated/contributions/'
+      path: '/'
+      fullPath: '/contributions/'
+      preLoaderRoute: typeof AuthenticatedContributionsIndexRouteImport
+      parentRoute: typeof AuthenticatedContributionsRoute
+    }
+    '/_authenticated/contributions/channels': {
+      id: '/_authenticated/contributions/channels'
+      path: '/channels'
+      fullPath: '/contributions/channels'
+      preLoaderRoute: typeof AuthenticatedContributionsChannelsRouteImport
+      parentRoute: typeof AuthenticatedContributionsRoute
     }
     '/_authenticated/dashboard/': {
       id: '/_authenticated/dashboard/'
@@ -1360,9 +1418,27 @@ const AuthenticatedSystemSettingsRouteRouteWithChildren =
     AuthenticatedSystemSettingsRouteRouteChildren,
   )
 
+interface AuthenticatedContributionsRouteChildren {
+  AuthenticatedContributionsChannelsRoute: typeof AuthenticatedContributionsChannelsRoute
+  AuthenticatedContributionsIndexRoute: typeof AuthenticatedContributionsIndexRoute
+}
+
+const AuthenticatedContributionsRouteChildren: AuthenticatedContributionsRouteChildren =
+  {
+    AuthenticatedContributionsChannelsRoute:
+      AuthenticatedContributionsChannelsRoute,
+    AuthenticatedContributionsIndexRoute: AuthenticatedContributionsIndexRoute,
+  }
+
+const AuthenticatedContributionsRouteWithChildren =
+  AuthenticatedContributionsRoute._addFileChildren(
+    AuthenticatedContributionsRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemSettingsRouteRoute: typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   AuthenticatedChat2linkRoute: typeof AuthenticatedChat2linkRoute
+  AuthenticatedContributionsRoute: typeof AuthenticatedContributionsRouteWithChildren
   AuthenticatedChatChatIdRoute: typeof AuthenticatedChatChatIdRoute
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
@@ -1389,6 +1465,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSystemSettingsRouteRoute:
     AuthenticatedSystemSettingsRouteRouteWithChildren,
   AuthenticatedChat2linkRoute: AuthenticatedChat2linkRoute,
+  AuthenticatedContributionsRoute: AuthenticatedContributionsRouteWithChildren,
   AuthenticatedChatChatIdRoute: AuthenticatedChatChatIdRoute,
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,

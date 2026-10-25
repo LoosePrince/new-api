@@ -320,7 +320,12 @@ export function useSidebarConfig(navGroups: NavGroup[]): NavGroup[] {
  * dropdown's wallet link) so they honour the same "wallet display" toggle.
  */
 export function isGuestSidebarUrlAllowed(url: string): boolean {
-  return url === '/profile' || url === '/security'
+  return (
+    url === '/profile' ||
+    url === '/security' ||
+    url === '/contributions' ||
+    url === '/contributions/channels'
+  )
 }
 
 export function useIsSidebarModuleVisible(url: string): boolean {

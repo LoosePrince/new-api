@@ -122,7 +122,7 @@ describe('security sidebar visibility', () => {
 })
 
 describe('guest sidebar visibility', () => {
-  it('shows only profile and security for guest accounts', () => {
+  it('shows only contribution overview and channels for guest accounts', () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     })
@@ -140,7 +140,24 @@ describe('guest sidebar visibility', () => {
     const items = filterGuestNavGroups(result.current.navGroups).flatMap(
       (group) => group.items
     )
-    expect(items.map((item) => item.url)).toEqual(['/profile', '/security'])
+    expect(items.map((item) => item.url)).toEqual([
+      '/contributions',
+      '/contributions/channels',
+      '/profile',
+      '/security',
+    ])
+    expect(items.filter((item) => item.url === '/contributions')).toHaveLength(
+      1
+    )
+  })
+
+  it('keeps the regular Overview entry for non-guest accounts', () => {
+    const { result } = sidebarFor()
+    expect(
+      result.current
+        .flatMap((group) => group.items)
+        .some((item) => item.url === '/dashboard/overview')
+    ).toBe(true)
   })
 
   it('removes unauthorized nested items instead of leaving an empty section', () => {
@@ -151,9 +168,7 @@ describe('guest sidebar visibility', () => {
         items: [
           {
             title: 'System Settings',
-            items: [
-              { title: 'Site', url: '/system-settings/site' },
-            ],
+            items: [{ title: 'Site', url: '/system-settings/site' }],
           },
           { title: 'Profile', url: '/profile' },
           { title: 'Security', url: '/security' },

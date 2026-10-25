@@ -279,6 +279,19 @@ func SetApiRouter(router *gin.Engine) {
 		}
 		handlePermissionRoute(apiRouter.Group("", middleware.AdminAuth()), http.MethodGet, "/task_plugin_options", authz.TaskPluginBind, controller.GetTaskPluginOptions)
 		registerChannelRoutes(apiRouter)
+		contributionRoute := apiRouter.Group("/contribution")
+		contributionRoute.Use(middleware.UserAuth())
+		{
+			contributionRoute.GET("/overview", controller.GetContributorOverview)
+			contributionRoute.GET("/channels", controller.ListContributorChannels)
+			contributionRoute.GET("/channels/:id/fetch_models", controller.FetchContributorUpstreamModels)
+			contributionRoute.GET("/channels/:id", controller.GetContributorChannel)
+			contributionRoute.POST("/channels/fetch_models", controller.FetchContributorModels)
+			contributionRoute.POST("/channels", controller.CreateContributorChannel)
+			contributionRoute.PUT("/channels", controller.UpdateContributorChannel)
+			contributionRoute.POST("/channels/:id/disable", controller.DisableContributorChannel)
+			contributionRoute.DELETE("/channels/:id", controller.DeleteContributorChannel)
+		}
 		registerAuthzRoutes(apiRouter)
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())

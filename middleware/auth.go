@@ -136,6 +136,9 @@ func TryUserAuth() func(c *gin.Context) {
 }
 
 func guestCanUsePath(path string) bool {
+	if strings.HasPrefix(path, "/api/contribution/") || path == "/api/contribution" {
+		return true
+	}
 	for _, prefix := range []string{
 		"/api/user/sessions",
 		"/api/user/passkey",

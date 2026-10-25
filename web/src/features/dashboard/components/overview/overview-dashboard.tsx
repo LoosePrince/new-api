@@ -48,6 +48,7 @@ import {
 } from '@/components/page-transition'
 import { Button } from '@/components/ui/button'
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
+import { ContributorOverview } from '@/features/channels/components/contributor-overview'
 import { fetchTokenKey, getApiKeys } from '@/features/keys/api'
 import type { ApiKey } from '@/features/keys/types'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
@@ -460,7 +461,7 @@ function CompactQuickAction(props: { action: QuickAction }) {
   )
 }
 
-export function OverviewDashboard() {
+function UserOverviewDashboard() {
   const { t } = useTranslation()
   const setupGuideId = useId()
   const setupGuideToggleRef = useRef<HTMLButtonElement>(null)
@@ -841,4 +842,9 @@ export function OverviewDashboard() {
       </SectionPageLayout.Content>
     </SectionPageLayout>
   )
+}
+
+export function OverviewDashboard() {
+  const isGuest = useAuthStore((state) => state.auth.user?.is_guest === true)
+  return isGuest ? <ContributorOverview /> : <UserOverviewDashboard />
 }

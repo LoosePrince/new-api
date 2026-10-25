@@ -70,6 +70,22 @@ export function useSidebarData(): SidebarData {
         ],
       },
       {
+        id: 'contributions',
+        title: t('Contributions'),
+        items: [
+          {
+            title: t('Contribution Overview'),
+            url: '/contributions',
+            icon: Radio,
+          },
+          {
+            title: t('Contribution Channels'),
+            url: '/contributions/channels',
+            icon: ServerCog,
+          },
+        ],
+      },
+      {
         id: 'general',
         title: t('General'),
         items: [

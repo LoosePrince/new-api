@@ -142,6 +142,95 @@ export async function getChannels(
   return res.data
 }
 
+export type ContributorOverview = {
+  channel_count: number
+  enabled_channel_count: number
+  request_count: number
+  token_used: number
+  model_ranking: Array<{
+    model_name: string
+    request_count: number
+    token_used: number
+  }>
+}
+
+export async function getContributorOverview(): Promise<{
+  success: boolean
+  message?: string
+  data?: ContributorOverview
+}> {
+  const res = await api.get('/api/contribution/overview')
+  return res.data
+}
+
+export async function getContributorChannels(
+  params: { p?: number; page_size?: number } = {}
+): Promise<GetChannelsResponse> {
+  const res = await api.get('/api/contribution/channels', { params })
+  return res.data
+}
+
+export async function getContributorChannel(
+  id: number
+): Promise<GetChannelResponse> {
+  const res = await api.get(`/api/contribution/channels/${id}`)
+  return res.data
+}
+
+export async function createContributorChannel(
+  data: AddChannelRequest
+): Promise<{ success: boolean; message?: string }> {
+  const res = await api.post(
+    '/api/contribution/channels',
+    data,
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export async function updateContributorChannel(
+  id: number,
+  data: Partial<Channel>
+): Promise<{ success: boolean; message?: string; data?: Channel }> {
+  const res = await api.put(
+    '/api/contribution/channels',
+    { id, ...data },
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export async function disableContributorChannel(
+  id: number
+): Promise<{ success: boolean; message?: string; data?: boolean }> {
+  const res = await api.post(
+    `/api/contribution/channels/${id}/disable`,
+    {},
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export async function deleteContributorChannel(
+  id: number
+): Promise<{ success: boolean; message?: string }> {
+  const res = await api.delete(
+    `/api/contribution/channels/${id}`,
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export async function fetchContributorUpstreamModels(
+  id: number
+): Promise<FetchModelsResponse> {
+  const res = await api.get(
+    `/api/contribution/channels/${id}/fetch_models`,
+    channelActionConfig()
+  )
+  return res.data
+}
+
 /**
  * Search channels with filters
  */
@@ -595,10 +684,7 @@ export async function getTagModels(
 // Utility Functions
 // ============================================================================
 
-/**
- * Fetch models from the current unsaved channel form configuration.
- */
-export async function fetchModels(data: {
+export type FetchModelsRequest = {
   base_url: string
   type: number
   key?: string
@@ -606,9 +692,27 @@ export async function fetchModels(data: {
   advanced_custom?: string
   header_override?: string
   proxy?: string
-}): Promise<FetchModelsResponse> {
+}
+
+/**
+ * Fetch models from the current unsaved channel form configuration.
+ */
+export async function fetchModels(
+  data: FetchModelsRequest
+): Promise<FetchModelsResponse> {
   const res = await api.post(
     '/api/channel/fetch_models',
+    data,
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export async function fetchContributorModels(
+  data: FetchModelsRequest
+): Promise<FetchModelsResponse> {
+  const res = await api.post(
+    '/api/contribution/channels/fetch_models',
     data,
     channelActionConfig()
   )

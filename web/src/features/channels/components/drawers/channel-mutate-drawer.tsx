@@ -130,6 +130,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import {
   getAllModels,
   getChannel,
+  getContributorChannel,
   getChannelDefaultBaseURLs,
   getGroups,
   getPrefillGroups,
@@ -251,6 +252,7 @@ type ChannelMutateDrawerProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   currentRow?: Channel | null
+  contributorMode?: boolean
 }
 
 type ModelMappingGuardrail = {
@@ -408,27 +410,35 @@ export function ChannelMutateDrawer({
   open,
   onOpenChange,
   currentRow,
+  contributorMode = false,
 }: ChannelMutateDrawerProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { setOpen } = useChannels()
   const currentUser = useAuthStore((s) => s.auth.user)
-  const canEditSensitive = hasPermission(
-    currentUser,
-    ADMIN_PERMISSION_RESOURCES.CHANNEL,
-    ADMIN_PERMISSION_ACTIONS.SENSITIVE_WRITE
-  )
-  const canOperateChannel = hasPermission(
-    currentUser,
-    ADMIN_PERMISSION_RESOURCES.CHANNEL,
-    ADMIN_PERMISSION_ACTIONS.OPERATE
-  )
-  const canBindTaskPlugin = hasPermission(
-    currentUser,
-    ADMIN_PERMISSION_RESOURCES.TASK_PLUGIN,
-    ADMIN_PERMISSION_ACTIONS.BIND
-  )
-  const canRevealChannelKey = currentUser?.role === ROLE.SUPER_ADMIN
+  const canEditSensitive =
+    contributorMode ||
+    hasPermission(
+      currentUser,
+      ADMIN_PERMISSION_RESOURCES.CHANNEL,
+      ADMIN_PERMISSION_ACTIONS.SENSITIVE_WRITE
+    )
+  const canOperateChannel =
+    !contributorMode &&
+    hasPermission(
+      currentUser,
+      ADMIN_PERMISSION_RESOURCES.CHANNEL,
+      ADMIN_PERMISSION_ACTIONS.OPERATE
+    )
+  const canBindTaskPlugin =
+    !contributorMode &&
+    hasPermission(
+      currentUser,
+      ADMIN_PERMISSION_RESOURCES.TASK_PLUGIN,
+      ADMIN_PERMISSION_ACTIONS.BIND
+    )
+  const canRevealChannelKey =
+    !contributorMode && currentUser?.role === ROLE.SUPER_ADMIN
   const [isCodexCredentialRefreshing, setIsCodexCredentialRefreshing] =
     useState(false)
   const initialModelsRef = useRef<string[]>([])
@@ -524,7 +534,7 @@ export function ChannelMutateDrawer({
     queryKey: channelsQueryKeys.defaultBaseURLs(),
     // Optional hints must not trigger the global error-page redirect.
     queryFn: () => getChannelDefaultBaseURLs().catch(() => null),
-    enabled: open,
+    enabled: open && !contributorMode,
     staleTime: 5 * 60 * 1000,
   })
 
@@ -536,8 +546,15 @@ export function ChannelMutateDrawer({
     error: channelError,
     refetch: refetchChannel,
   } = useQuery({
-    queryKey: channelsQueryKeys.detail(channelId || 0),
-    queryFn: async () => requireServerSuccess(await getChannel(channelId || 0)),
+    queryKey: contributorMode
+      ? ['contributor-channel', channelId || 0]
+      : channelsQueryKeys.detail(channelId || 0),
+    queryFn: async () =>
+      requireServerSuccess(
+        await (contributorMode
+          ? getContributorChannel(channelId || 0)
+          : getChannel(channelId || 0))
+      ),
     enabled: open && isEditing && Boolean(channelId),
     meta: { errorToast: false },
   })
@@ -546,21 +563,21 @@ export function ChannelMutateDrawer({
   const { data: groupsData, isLoading: isLoadingGroups } = useQuery({
     queryKey: ['groups'],
     queryFn: async () => requireServerSuccess(await getGroups()),
-    enabled: open && !showProviderPicker,
+    enabled: open && !showProviderPicker && !contributorMode,
   })
 
   // Fetch all available models
   const { data: allModelsData } = useQuery({
     queryKey: ['channel_models'],
     queryFn: async () => requireServerSuccess(await getAllModels()),
-    enabled: open && !showProviderPicker,
+    enabled: open && !showProviderPicker && !contributorMode,
   })
 
   // Fetch prefill model groups
   const { data: prefillGroupsData } = useQuery({
     queryKey: ['prefill_groups', 'model'],
     queryFn: async () => requireServerSuccess(await getPrefillGroups('model')),
-    enabled: open && !showProviderPicker,
+    enabled: open && !showProviderPicker && !contributorMode,
   })
 
   const { copyToClipboard } = useCopyToClipboard()
@@ -1201,8 +1218,11 @@ export function ChannelMutateDrawer({
   // preview path, which reuses the saved credential on the server.
   const previewModels =
     !isEditing ||
-    (currentType === CHANNEL_TYPE_ADVANCED_CUSTOM && canEditSensitive)
-  const canDiscoverModels = previewModels ? canEditSensitive : canOperateChannel
+    (!contributorMode &&
+      currentType === CHANNEL_TYPE_ADVANCED_CUSTOM &&
+      canEditSensitive)
+  const canDiscoverModels =
+    contributorMode || (previewModels ? canEditSensitive : canOperateChannel)
   const previewKey = isEditing ? undefined : currentKey
   const previewRequest = useMemo<ChannelModelDiscoveryRequest>(
     () => ({
@@ -1239,6 +1259,7 @@ export function ChannelMutateDrawer({
       MODEL_FETCHABLE_TYPES.has(currentType) &&
       (!isEditing || Boolean(channelData?.data)),
     request: previewModels ? previewRequest : savedRequest,
+    contributorMode,
   })
   const upstreamModelList =
     discovery.status === 'success' ? discovery.models : NO_UPSTREAM_MODELS
@@ -1506,15 +1527,21 @@ export function ChannelMutateDrawer({
 
   // Handle successful submission
   const handleSuccess = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
+    queryClient.invalidateQueries({
+      queryKey: contributorMode
+        ? ['contributor-channels']
+        : channelsQueryKeys.lists(),
+    })
     if (channelId) {
       queryClient.invalidateQueries({
-        queryKey: channelsQueryKeys.detail(channelId),
+        queryKey: contributorMode
+          ? ['contributor-channel', channelId]
+          : channelsQueryKeys.detail(channelId),
       })
     }
     onOpenChange(false)
     setOpen(null)
-  }, [channelId, queryClient, onOpenChange, setOpen])
+  }, [channelId, contributorMode, queryClient, onOpenChange, setOpen])
 
   // Show missing models confirmation dialog
   const confirmMissingModelMappings = useCallback(
@@ -1600,6 +1627,7 @@ export function ChannelMutateDrawer({
     currentRow,
     isEditing,
     isMultiKeyChannel,
+    contributorMode,
     onSuccess: handleSuccess,
   })
 
@@ -3206,10 +3234,18 @@ export function ChannelMutateDrawer({
                         <FormItem className='flex items-center justify-between gap-3 rounded-md border px-3 py-2'>
                           <div>
                             <FormLabel>{t('Fallback-only channel')}</FormLabel>
-                            <FormDescription>{t('Models on this channel are used only by fallback and safety-group routing.')}</FormDescription>
+                            <FormDescription>
+                              {t(
+                                'Models on this channel are used only by fallback and safety-group routing.'
+                              )}
+                            </FormDescription>
                           </div>
                           <FormControl>
-                            <Switch checked={field.value} onCheckedChange={field.onChange} disabled={sensitiveLocked} />
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              disabled={sensitiveLocked}
+                            />
                           </FormControl>
                         </FormItem>
                       )}
@@ -3220,8 +3256,18 @@ export function ChannelMutateDrawer({
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>{t('Fallback-only models')}</FormLabel>
-                          <FormControl><Input {...field} placeholder={t('Comma-separated model names')} disabled={sensitiveLocked} /></FormControl>
-                          <FormDescription>{t('These models cannot be selected directly, but remain available to fallback routing.')}</FormDescription>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              placeholder={t('Comma-separated model names')}
+                              disabled={sensitiveLocked}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            {t(
+                              'These models cannot be selected directly, but remain available to fallback routing.'
+                            )}
+                          </FormDescription>
                         </FormItem>
                       )}
                     />
@@ -3541,35 +3587,37 @@ export function ChannelMutateDrawer({
             </div>
           </div>
 
-          <div className='border-border/60 rounded-lg border p-4'>
-            <FormField
-              control={form.control}
-              name='group'
-              render={({ field }) => (
-                <FormItem className='space-y-3'>
-                  <div className='space-y-1'>
-                    <FormLabel required>{t('Groups')}</FormLabel>
-                    <FormDescription>
-                      {t(FIELD_DESCRIPTIONS.GROUP)}
-                    </FormDescription>
-                  </div>
-                  <FormControl>
-                    {isLoadingGroups ? (
-                      <Skeleton className='h-10 w-full' />
-                    ) : (
-                      <MultiSelect
-                        options={groupOptions}
-                        selected={field.value}
-                        onChange={field.onChange}
-                        placeholder={t(FIELD_PLACEHOLDERS.GROUP)}
-                      />
-                    )}
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
+          {!contributorMode && (
+            <div className='border-border/60 rounded-lg border p-4'>
+              <FormField
+                control={form.control}
+                name='group'
+                render={({ field }) => (
+                  <FormItem className='space-y-3'>
+                    <div className='space-y-1'>
+                      <FormLabel required>{t('Groups')}</FormLabel>
+                      <FormDescription>
+                        {t(FIELD_DESCRIPTIONS.GROUP)}
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      {isLoadingGroups ? (
+                        <Skeleton className='h-10 w-full' />
+                      ) : (
+                        <MultiSelect
+                          options={groupOptions}
+                          selected={field.value}
+                          onChange={field.onChange}
+                          placeholder={t(FIELD_PLACEHOLDERS.GROUP)}
+                        />
+                      )}
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          )}
         </div>
       </ChannelModelsSection>
     </div>
@@ -4559,7 +4607,7 @@ export function ChannelMutateDrawer({
                       )}
                     </div>
                     <div className='flex flex-wrap items-center gap-2'>
-                      {isEditing && channelId && (
+                      {isEditing && channelId && !contributorMode && (
                         <Button
                           type='button'
                           variant='outline'
@@ -4746,7 +4794,7 @@ export function ChannelMutateDrawer({
         }
         models={modelsSection}
         quickOptions={
-          viewportWide ? null : (
+          contributorMode || viewportWide ? null : (
             <ChannelQuickOptions
               channelType={currentType}
               sensitiveLocked={sensitiveLocked}
@@ -4949,6 +4997,7 @@ export function ChannelMutateDrawer({
                   </SheetDescription>
                 </div>
                 {viewportWide &&
+                  !contributorMode &&
                   !showProviderPicker &&
                   !channelError &&
                   !isChannelDetailLoading && (

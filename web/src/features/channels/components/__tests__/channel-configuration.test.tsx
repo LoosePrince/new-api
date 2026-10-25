@@ -102,6 +102,7 @@ function ConfigurationHarness(props: {
   initialOpen?: boolean
   currentRow?: Channel
   clearRowOnClose?: boolean
+  contributorMode?: boolean
 }) {
   const [open, setOpen] = useState(props.initialOpen ?? true)
   const [router] = useState(() =>
@@ -123,6 +124,7 @@ function ConfigurationHarness(props: {
             currentRow={
               open || !props.clearRowOnClose ? props.currentRow : null
             }
+            contributorMode={props.contributorMode}
           />
         </ChannelsProvider>
       </RouterContextProvider>
@@ -161,6 +163,12 @@ beforeEach(() => {
     }
     if (url === '/api/channel/fetch_models/42') {
       return { data: { success: true, data: ['upstream-model'] } }
+    }
+    if (url === '/api/contribution/channels/42') {
+      return { data: { success: true, data: editingChannel } }
+    }
+    if (url === '/api/contribution/channels/42/fetch_models') {
+      return { data: { success: true, data: ['contributor-upstream-model'] } }
     }
     if (url === '/api/task_plugin_options') {
       return { data: { success: true, data: pluginOptions } }
@@ -1112,6 +1120,26 @@ test('model discovery discards a response for old credentials and retains manual
     screen.getByRole('button', { name: 'current-upstream-model' })
   ).toBeVisible()
   expect(screen.getByText('custom-model')).toBeVisible()
+})
+
+test('contributor creation uses the contributor preview endpoint for model discovery', async () => {
+  const post = vi.spyOn(api, 'post').mockResolvedValue({
+    data: { success: true, data: ['contributor-preview-model'] },
+  })
+  const user = userEvent.setup()
+  render(<ConfigurationHarness contributorMode />)
+  await user.click(screen.getByRole('option', { name: /^OpenAI / }))
+  fireEvent.change(screen.getByLabelText('API Key *'), {
+    target: { value: 'contributor-key' },
+  })
+  await user.click(screen.getByRole('button', { name: 'Fetch from Upstream' }))
+
+  expect(post).toHaveBeenCalledWith(
+    '/api/contribution/channels/fetch_models',
+    expect.objectContaining({ type: 1, key: 'contributor-key' }),
+    expect.anything()
+  )
+  expect(await screen.findByText('contributor-preview-model')).toBeVisible()
 })
 
 test('model discovery reports failures inline and allows an empty result to fall back to manual models', async () => {
