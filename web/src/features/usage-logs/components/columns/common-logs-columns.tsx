@@ -413,8 +413,14 @@ export function useCommonLogsColumns(
               ? rawUseChannel.map(String).filter(Boolean)
               : []
             const hasRetryChain = useChannel.length > 1
+            const channelNames = other?.admin_info?.channel_names
             const channelChain = hasRetryChain
-              ? useChannel.join(' → ')
+              ? useChannel
+                  .map((id) => {
+                    const name = channelNames?.[id]
+                    return name ? `${name} (#${id})` : `#${id}`
+                  })
+                  .join(' → ')
               : undefined
             const channelDisplay = log.channel_name
               ? `${log.channel_name} #${log.channel}`

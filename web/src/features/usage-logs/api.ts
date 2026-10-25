@@ -29,6 +29,7 @@ import type {
   GetLogStatsResponse,
   GetMidjourneyLogsParams,
   GetTaskLogsParams,
+  RequestCapture,
   TaskArtifactsResponse,
   UserInfo,
 } from './types'
@@ -87,6 +88,17 @@ export const getLogStats = (params: GetLogStatsParams = {}) =>
 export const getUserLogStats = (
   params: Omit<GetLogStatsParams, 'username' | 'channel'> = {}
 ) => fetchLogStats('/api/log', params, false)
+
+export async function getRequestCaptures(requestId: string) {
+  const response = await api.get<{
+    success: boolean
+    message?: string
+    data?: { items: RequestCapture[]; total: number }
+  }>('/api/request-captures/', {
+    params: { request_id: requestId, p: 1, page_size: 100 },
+  })
+  return response.data
+}
 
 /**
  * Stream the logs matching params, newest first. The server sends one JSON

@@ -14,6 +14,7 @@ import (
 	common2 "github.com/QuantumNous/new-api/common"
 	appconstant "github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -341,6 +342,7 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 	if err = ApplyHeaderOverride(info, c, req); err != nil {
 		return nil, err
 	}
+	beginRequestCapture(c, info, req)
 	resp, err := doRequest(c, req, info)
 	if err != nil {
 		return nil, fmt.Errorf("do request failed: %w", err)
@@ -371,6 +373,7 @@ func DoFormRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBod
 	if err = ApplyHeaderOverride(info, c, req); err != nil {
 		return nil, err
 	}
+	beginRequestCapture(c, info, req)
 	resp, err := doRequest(c, req, info)
 	if err != nil {
 		return nil, fmt.Errorf("do request failed: %w", err)
@@ -448,6 +451,28 @@ func DoRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	return doRequest(c, req, info)
 }
 
+func beginRequestCapture(c *gin.Context, info *common.RelayInfo, req *http.Request) {
+	if c == nil || info == nil || req == nil {
+		return
+	}
+	modelName := info.AttemptModelName
+	if modelName == "" {
+		modelName = info.OriginModelName
+	}
+	channelID := c.GetInt("channel_id")
+	if info.ChannelMeta != nil && info.ChannelMeta.ChannelId != 0 {
+		channelID = info.ChannelMeta.ChannelId
+	}
+	var body io.Reader
+	if req.GetBody != nil {
+		if clone, err := req.GetBody(); err == nil {
+			defer clone.Close()
+			body = clone
+		}
+	}
+	model.BeginRequestCapture(c, info.UserId, c.GetString("username"), modelName, channelID, info.RetryIndex+1, body)
+}
+
 // keepUpstreamRedirectResponse stops net/http from following redirects while
 // returning the upstream 3xx response to the relay without an extra error.
 func keepUpstreamRedirectResponse(_ *http.Request, _ []*http.Request) error {
@@ -506,7 +531,9 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 
 	if upID := resp.Header.Get(common2.RequestIdKey); upID != "" {
 		c.Set(common2.UpstreamRequestIdKey, upID)
+		model.SetRequestCaptureUpstreamRequestID(c, upID)
 	}
+	model.WrapRequestCaptureResponse(c, resp)
 
 	_ = req.Body.Close()
 	_ = c.Request.Body.Close()
@@ -539,6 +566,7 @@ func DoTaskApiRequest(a TaskAdaptor, c *gin.Context, info *common.RelayInfo, req
 	if err = ApplyHeaderOverride(info, c, req); err != nil {
 		return nil, err
 	}
+	beginRequestCapture(c, info, req)
 	resp, err := doRequest(c, req, info)
 	if err != nil {
 		return nil, fmt.Errorf("do request failed: %w", err)

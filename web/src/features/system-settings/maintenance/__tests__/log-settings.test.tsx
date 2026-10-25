@@ -44,6 +44,12 @@ function Fixture() {
             LogConsumeEnabled: true,
             'log_setting.user_export_enabled': true,
             'log_setting.max_range_days': 30,
+            'log_setting.request_capture_enabled': false,
+            'log_setting.request_capture_original': true,
+            'log_setting.request_capture_upstream': true,
+            'log_setting.request_capture_response': true,
+            'log_setting.request_capture_max_body_kb': 256,
+            'log_setting.request_capture_retention_days': 30,
           }}
         />
       </SettingsPageProvider>
@@ -87,10 +93,11 @@ test('the page shows the four log modules in order, each with its own controls',
     'Log recording',
     'Log search and export',
     'Clean history logs',
+    'Request record management',
     'Server Log Management',
   ])
   const recording = screen.getByRole('group', { name: 'Log recording' })
-  expect(within(recording).getAllByRole('switch')).toHaveLength(1)
+  expect(within(recording).getAllByRole('switch')).toHaveLength(5)
   expect(
     within(recording).getByRole('switch', { name: 'Record quota usage' })
   ).toBeVisible()

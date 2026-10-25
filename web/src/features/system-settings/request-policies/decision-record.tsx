@@ -5,7 +5,7 @@ import { policyLabel } from './policy-label'
 
 export function PolicyDecisionRecord(props: {
   events: PolicyEvent[] | null
-  channelNames?: Record<number, string>
+  channelNames?: Record<number | string, string>
 }) {
   const { t } = useTranslation()
   return (

@@ -331,6 +331,17 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/self/export", middleware.UserAuth(), controller.ExportUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
 
+		captureRoute := apiRouter.Group("/request-captures")
+		captureRoute.Use(middleware.AdminAuth())
+		{
+			captureRoute.GET("/", controller.GetRequestCaptures)
+			captureRoute.GET("/export", controller.ExportRequestCaptures)
+			captureRoute.GET("/:id", controller.GetRequestCapture)
+			captureRoute.DELETE("/before", middleware.RootAuth(), controller.DeleteRequestCapturesBefore)
+			captureRoute.DELETE("/", middleware.RootAuth(), controller.DeleteAllRequestCaptures)
+			captureRoute.DELETE("/:id", middleware.RootAuth(), controller.DeleteRequestCapture)
+		}
+
 		systemTaskRoute := apiRouter.Group("/system-task")
 		systemTaskRoute.Use(middleware.RootAuth())
 		{

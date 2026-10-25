@@ -45,6 +45,30 @@ export const usageLogSchema = z.object({
   other: z.string().default(''),
   request_id: z.string().default(''),
   upstream_request_id: z.string().default(''),
+  request_captures: z
+    .array(
+      z.object({
+        id: z.number(),
+        request_id: z.string(),
+        upstream_request_id: z.string().optional(),
+        created_at: z.number(),
+        user_id: z.number(),
+        username: z.string(),
+        model_name: z.string(),
+        channel_id: z.number(),
+        channel_name: z.string(),
+        attempt: z.number(),
+        request_body: z.string().optional(),
+        upstream_request_body: z.string().optional(),
+        response_body: z.string().optional(),
+        response_status: z.number().optional(),
+        response_content_type: z.string().optional(),
+        request_truncated: z.boolean().optional(),
+        upstream_truncated: z.boolean().optional(),
+        response_truncated: z.boolean().optional(),
+      })
+    )
+    .optional(),
 })
 
 export type UsageLog = z.infer<typeof usageLogSchema>

@@ -56,27 +56,28 @@ func sanitizeClickHouseLikePattern(input string) (string, error) {
 }
 
 type Log struct {
-	Id                int    `json:"id" gorm:"index:idx_created_at_id,priority:2;index:idx_user_id_id,priority:2"`
-	UserId            int    `json:"user_id" gorm:"index;index:idx_user_id_id,priority:1"`
-	CreatedAt         int64  `json:"created_at" gorm:"bigint;index:idx_created_at_id,priority:1;index:idx_created_at_type"`
-	Type              int    `json:"type" gorm:"index:idx_created_at_type"`
-	Content           string `json:"content"`
-	Username          string `json:"username" gorm:"index;index:index_username_model_name,priority:2;default:''"`
-	TokenName         string `json:"token_name" gorm:"index;default:''"`
-	ModelName         string `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
-	Quota             int    `json:"quota" gorm:"default:0"`
-	PromptTokens      int    `json:"prompt_tokens" gorm:"default:0"`
-	CompletionTokens  int    `json:"completion_tokens" gorm:"default:0"`
-	UseTime           int    `json:"use_time" gorm:"default:0"`
-	IsStream          bool   `json:"is_stream"`
-	ChannelId         int    `json:"channel" gorm:"index"`
-	ChannelName       string `json:"channel_name" gorm:"->"`
-	TokenId           int    `json:"token_id" gorm:"default:0;index"`
-	Group             string `json:"group" gorm:"index"`
-	Ip                string `json:"ip" gorm:"index;default:''"`
-	RequestId         string `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
-	UpstreamRequestId string `json:"upstream_request_id,omitempty" gorm:"type:varchar(128);index:idx_logs_upstream_request_id;default:''"`
-	Other             string `json:"other"`
+	Id                int               `json:"id" gorm:"index:idx_created_at_id,priority:2;index:idx_user_id_id,priority:2"`
+	UserId            int               `json:"user_id" gorm:"index;index:idx_user_id_id,priority:1"`
+	CreatedAt         int64             `json:"created_at" gorm:"bigint;index:idx_created_at_id,priority:1;index:idx_created_at_type"`
+	Type              int               `json:"type" gorm:"index:idx_created_at_type"`
+	Content           string            `json:"content"`
+	Username          string            `json:"username" gorm:"index;index:index_username_model_name,priority:2;default:''"`
+	TokenName         string            `json:"token_name" gorm:"index;default:''"`
+	ModelName         string            `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
+	Quota             int               `json:"quota" gorm:"default:0"`
+	PromptTokens      int               `json:"prompt_tokens" gorm:"default:0"`
+	CompletionTokens  int               `json:"completion_tokens" gorm:"default:0"`
+	UseTime           int               `json:"use_time" gorm:"default:0"`
+	IsStream          bool              `json:"is_stream"`
+	ChannelId         int               `json:"channel" gorm:"index"`
+	ChannelName       string            `json:"channel_name" gorm:"->"`
+	TokenId           int               `json:"token_id" gorm:"default:0;index"`
+	Group             string            `json:"group" gorm:"index"`
+	Ip                string            `json:"ip" gorm:"index;default:''"`
+	RequestId         string            `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
+	UpstreamRequestId string            `json:"upstream_request_id,omitempty" gorm:"type:varchar(128);index:idx_logs_upstream_request_id;default:''"`
+	Other             string            `json:"other"`
+	RequestCaptures   []*RequestCapture `json:"request_captures,omitempty" gorm:"-"`
 }
 
 // don't use iota, avoid change log type value
@@ -627,19 +628,47 @@ func StreamAllLogs(ctx context.Context, filter LogFilter, role int, fn func(*Log
 		visibility = logOtherVisibilityRoot
 	}
 	channelNames := make(map[int]string)
-	return streamLogs(tx, "logs.created_at desc, logs.id desc", func(log *Log) error {
-		if log.ChannelId != 0 {
-			name, ok := channelNames[log.ChannelId]
-			if !ok {
-				if channel, err := CacheGetChannel(log.ChannelId); err == nil {
-					name = channel.Name
-				}
-				channelNames[log.ChannelId] = name
+	return streamLogBatches(tx, "logs.created_at desc, logs.id desc", 100, func(logs []*Log) error {
+		requestIDs := make([]string, 0, len(logs))
+		seenRequestIDs := make(map[string]struct{}, len(logs))
+		for _, log := range logs {
+			if log.RequestId == "" {
+				continue
 			}
-			log.ChannelName = name
+			if _, seen := seenRequestIDs[log.RequestId]; seen {
+				continue
+			}
+			seenRequestIDs[log.RequestId] = struct{}{}
+			requestIDs = append(requestIDs, log.RequestId)
 		}
-		log.Other = formatLogOtherJSON(log.Other, visibility)
-		return fn(log)
+		capturesByRequestID := make(map[string][]*RequestCapture, len(requestIDs))
+		if len(requestIDs) > 0 {
+			var captures []*RequestCapture
+			if err := LOG_DB.WithContext(ctx).Where("request_id IN ?", requestIDs).Order("created_at asc, id asc").Find(&captures).Error; err != nil {
+				return err
+			}
+			for _, capture := range captures {
+				capturesByRequestID[capture.RequestId] = append(capturesByRequestID[capture.RequestId], capture)
+			}
+		}
+		for _, log := range logs {
+			if log.ChannelId != 0 {
+				name, ok := channelNames[log.ChannelId]
+				if !ok {
+					if channel, err := CacheGetChannel(log.ChannelId); err == nil {
+						name = channel.Name
+					}
+					channelNames[log.ChannelId] = name
+				}
+				log.ChannelName = name
+			}
+			log.RequestCaptures = capturesByRequestID[log.RequestId]
+			log.Other = formatLogOtherJSON(log.Other, visibility)
+			if err := fn(log); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
@@ -658,6 +687,30 @@ func StreamUserLogs(ctx context.Context, userId int, filter LogFilter, fn func(*
 		log.Other = formatLogOtherJSON(log.Other, logOtherVisibilityUser)
 		return fn(log)
 	})
+}
+
+func streamLogBatches(tx *gorm.DB, order string, batchSize int, fn func([]*Log) error) error {
+	if batchSize <= 0 {
+		batchSize = 100
+	}
+	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
+		order = clickHouseLogOrder("logs.")
+	}
+	for offset := 0; ; offset += batchSize {
+		var logs []*Log
+		if err := tx.Model(&Log{}).Order(order).Limit(batchSize).Offset(offset).Find(&logs).Error; err != nil {
+			return err
+		}
+		if len(logs) == 0 {
+			return nil
+		}
+		if err := fn(logs); err != nil {
+			return err
+		}
+		if len(logs) < batchSize {
+			return nil
+		}
+	}
 }
 
 func streamLogs(tx *gorm.DB, order string, fn func(*Log) error) error {

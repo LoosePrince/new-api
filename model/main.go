@@ -238,7 +238,10 @@ func InitLogDB() (err error) {
 		common.SetLogDatabaseType(common.MainDatabaseType())
 		initCol()
 		if common.IsMasterNode {
-			return MigrateAuditLogs()
+			if err := MigrateAuditLogs(); err != nil {
+				return err
+			}
+			return LOG_DB.AutoMigrate(&RequestCapture{})
 		}
 		return
 	}
@@ -406,9 +409,35 @@ func migrateLOGDB() error {
 		return err
 	}
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
-		return migrateClickHouseLogDB()
+		if err := migrateClickHouseLogDB(); err != nil {
+			return err
+		}
+		return migrateClickHouseRequestCaptures()
 	}
-	return LOG_DB.AutoMigrate(&Log{})
+	return LOG_DB.AutoMigrate(&Log{}, &RequestCapture{})
+}
+
+func migrateClickHouseRequestCaptures() error {
+	return LOG_DB.Exec(`CREATE TABLE IF NOT EXISTS request_captures (
+		id Int64,
+		request_id String DEFAULT '',
+		upstream_request_id String DEFAULT '',
+		created_at Int64 DEFAULT 0,
+		user_id Int32 DEFAULT 0,
+		username String DEFAULT '',
+		model_name String DEFAULT '',
+		channel_id Int32 DEFAULT 0,
+		channel_name String DEFAULT '',
+		attempt Int32 DEFAULT 0,
+		request_body String DEFAULT '',
+		upstream_request_body String DEFAULT '',
+		response_body String DEFAULT '',
+		response_status Int32 DEFAULT 0,
+		response_content_type String DEFAULT '',
+		request_truncated UInt8 DEFAULT 0,
+		upstream_truncated UInt8 DEFAULT 0,
+		response_truncated UInt8 DEFAULT 0
+	) ENGINE = MergeTree() PARTITION BY toYYYYMM(toDateTime(created_at)) ORDER BY (created_at, request_id, id)`).Error
 }
 
 func migrateClickHouseLogDB() error {

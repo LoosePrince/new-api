@@ -120,6 +120,7 @@ export interface LogOtherData {
     is_multi_key?: boolean
     multi_key_index?: number
     use_channel?: number[]
+    channel_names?: Record<string, string>
     local_count_tokens?: boolean
     usage_billing_path?: UsageBillingPath | string
     channel_affinity?: ChannelAffinityInfo
@@ -283,6 +284,27 @@ export interface LogOtherData {
 /**
  * Log statistics data
  */
+export interface RequestCapture {
+  id: number
+  request_id: string
+  upstream_request_id?: string
+  created_at: number
+  user_id: number
+  username: string
+  model_name: string
+  channel_id: number
+  channel_name: string
+  attempt: number
+  request_body?: string
+  upstream_request_body?: string
+  response_body?: string
+  response_status?: number
+  response_content_type?: string
+  request_truncated?: boolean
+  upstream_truncated?: boolean
+  response_truncated?: boolean
+}
+
 export interface LogStatistics {
   quota: number
   rpm: number

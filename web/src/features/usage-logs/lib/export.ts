@@ -51,6 +51,7 @@ export function getLogCsvHeader(isAdmin: boolean, t: Translate): string[] {
     t('IP'),
     t('Request ID'),
     t('Details'),
+    ...(isAdmin ? [t('Request Captures')] : []),
   ]
 }
 
@@ -91,6 +92,7 @@ export function getLogCsvRow(
     log.ip ?? '',
     log.request_id ?? '',
     renderLogContent(other, t) ?? log.content ?? '',
+    ...(isAdmin ? [JSON.stringify(log.request_captures ?? [])] : []),
   ]
 }
 

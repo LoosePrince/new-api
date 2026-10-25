@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/base64"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -70,7 +71,19 @@ func AppendRelayLogAdminInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo,
 	if ctx == nil || other == nil {
 		return
 	}
-	other.SetAdmin("use_channel", ctx.GetStringSlice("use_channel"))
+	useChannel := ctx.GetStringSlice("use_channel")
+	other.SetAdmin("use_channel", useChannel)
+	channelNames := make(map[string]string, len(useChannel))
+	for _, channelID := range useChannel {
+		if id, err := strconv.Atoi(channelID); err == nil {
+			if channel, err := model.CacheGetChannel(id); err == nil && channel.Name != "" {
+				channelNames[channelID] = channel.Name
+			}
+		}
+	}
+	if len(channelNames) > 0 {
+		other.SetAdmin("channel_names", channelNames)
+	}
 	if relayInfo != nil {
 		if billingModel := relayInfo.GetBillingModelName(); billingModel != "" && billingModel != relayInfo.OriginModelName {
 			other.SetAdmin("billing_model", billingModel)

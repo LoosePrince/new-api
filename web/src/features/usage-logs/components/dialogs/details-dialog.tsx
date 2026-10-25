@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useQuery } from '@tanstack/react-query'
 import type { TFunction } from 'i18next'
 /*
 Copyright (C) 2023-2026 QuantumNous
@@ -38,6 +39,7 @@ For commercial licensing, please contact support@quantumnous.com
 import {
   Copy,
   Check,
+  Download,
   Route,
   Settings2,
   AlertTriangle,
@@ -53,6 +55,7 @@ import {
 import { useTranslation } from 'react-i18next'
 
 import { Dialog } from '@/components/dialog'
+import { getRequestCaptures } from '../../api'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -509,6 +512,37 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
   )
 }
 
+function CaptureBody(props: {
+  label: string
+  value: string
+  truncated?: boolean
+}) {
+  const { t } = useTranslation()
+  const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
+  return (
+    <div className='min-w-0 space-y-1'>
+      <div className='flex items-center justify-between gap-2'>
+        <Label className='text-xs font-semibold'>
+          {props.label}{props.truncated ? ` · ${t('Truncated')}` : ''}
+        </Label>
+        <Button
+          variant='ghost'
+          size='icon'
+          className='size-6'
+          onClick={() => copyToClipboard(props.value)}
+          title={t('Copy to clipboard')}
+          aria-label={t('Copy to clipboard')}
+        >
+          {copiedText === props.value ? <Check className='size-3 text-green-600' /> : <Copy className='size-3' />}
+        </Button>
+      </div>
+      <pre className='bg-background/60 max-h-56 overflow-auto rounded border p-2 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap'>
+        {props.value}
+      </pre>
+    </div>
+  )
+}
+
 interface DetailsDialogProps {
   log: UsageLog
   isAdmin: boolean
@@ -522,6 +556,12 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
   const other = parseLogOther(props.log.other)
   const typeConfig = getLogTypeConfig(props.log.type)
+  const requestCapturesQuery = useQuery({
+    queryKey: ['request-captures', props.log.request_id],
+    enabled: props.open && props.isAdmin && Boolean(props.log.request_id),
+    queryFn: () => getRequestCaptures(props.log.request_id),
+  })
+  const requestCaptures = requestCapturesQuery.data?.data?.items ?? []
 
   const isViolation = isViolationFeeLog(other)
   const isRefund = props.log.type === 6
@@ -662,7 +702,14 @@ export function DetailsDialog(props: DetailsDialogProps) {
 
   const useChannel = other?.admin_info?.use_channel
   const channelChain =
-    useChannel && useChannel.length > 0 ? useChannel.join(' → ') : undefined
+    useChannel && useChannel.length > 0
+      ? useChannel
+          .map((channelId) => {
+            const name = other?.admin_info?.channel_names?.[String(channelId)]
+            return name ? `${name} (#${channelId})` : `#${channelId}`
+          })
+          .join(' → ')
+      : undefined
   const reasoningEffortVariant = getReasoningEffortVariant(
     other?.reasoning_effort
   )
@@ -846,9 +893,51 @@ export function DetailsDialog(props: DetailsDialogProps) {
             label={t('Request policy decisions')}
             icon={<Route className='size-4' />}
           >
-            <PolicyDecisionRecord events={adminInfo.request_policy} />
+            <DetailRow
+              label={t('Request Model')}
+              value={props.log.model_name}
+              mono
+            />
+            <PolicyDecisionRecord
+              events={adminInfo.request_policy}
+              channelNames={adminInfo.channel_names}
+            />
           </DetailSection>
         ) : null}
+
+        {props.isAdmin && props.log.request_id && requestCaptures.length > 0 && (
+          <DetailSection label={t('Request records')}>
+            <a
+              href={`/api/request-captures/export?request_id=${encodeURIComponent(props.log.request_id)}`}
+              download
+              className='text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs'
+            >
+              <Download className='size-3' aria-hidden='true' />
+              {t('Export request records')}
+            </a>
+            {requestCaptures.map((capture) => (
+              <div key={capture.id} className='space-y-2 border-b pb-3 last:border-0 last:pb-0'>
+                <DetailRow
+                  label={t('Attempt')}
+                  value={`${capture.attempt} · #${capture.channel_id}${capture.channel_name ? ` (${capture.channel_name})` : ''}`}
+                  mono
+                />
+                {capture.response_status != null && (
+                  <DetailRow label={t('Response status')} value={String(capture.response_status)} mono />
+                )}
+                {capture.request_body != null && (
+                  <CaptureBody label={t('Original request')} value={capture.request_body} truncated={capture.request_truncated} />
+                )}
+                {capture.upstream_request_body != null && (
+                  <CaptureBody label={t('Upstream request')} value={capture.upstream_request_body} truncated={capture.upstream_truncated} />
+                )}
+                {capture.response_body != null && (
+                  <CaptureBody label={t('Upstream response')} value={capture.response_body} truncated={capture.response_truncated} />
+                )}
+              </div>
+            ))}
+          </DetailSection>
+        )}
         {props.isAdmin && other?.admin_info?.quota_saturation && (
           <DetailSection
             icon={<AlertTriangle className='size-3.5' aria-hidden='true' />}

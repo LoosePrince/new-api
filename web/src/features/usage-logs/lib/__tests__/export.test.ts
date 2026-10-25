@@ -82,6 +82,36 @@ describe('usage log CSV export', () => {
     expect(header).not.toContain('渠道')
   })
 
+  test('administrator export includes captured request bodies while user export omits them', async () => {
+    const t = await chineseTranslator()
+    const log: UsageLog = {
+      ...consumeLog,
+      request_captures: [
+        {
+          id: 11,
+          request_id: 'req-1',
+          created_at: consumeLog.created_at,
+          user_id: consumeLog.user_id,
+          username: consumeLog.username,
+          model_name: consumeLog.model_name,
+          channel_id: consumeLog.channel,
+          channel_name: consumeLog.channel_name ?? '',
+          attempt: 1,
+          request_body: '{"prompt":"hello"}',
+        },
+      ],
+    }
+    const adminHeader = getLogCsvHeader(true, t)
+    const adminRow = getLogCsvRow(log, true, t)
+    const userHeader = getLogCsvHeader(false, t)
+    const userRow = getLogCsvRow(log, false, t)
+
+    expect(adminRow).toHaveLength(adminHeader.length)
+    expect(adminRow[adminHeader.indexOf('Request Captures')]).toContain('hello')
+    expect(userHeader).not.toContain('Request Captures')
+    expect(userRow).not.toContain(expect.stringContaining('hello'))
+  })
+
   test('administrator row shows the user and channel next to the matching header', async () => {
     const t = await chineseTranslator()
 

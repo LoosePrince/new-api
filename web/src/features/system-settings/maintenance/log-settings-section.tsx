@@ -46,6 +46,7 @@ import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 import { safeNumberFieldProps } from '../utils/numeric-field'
 import { HistoryLogCleanup } from './history-log-cleanup'
+import { RequestCaptureManagement } from './request-capture-management'
 import { ServerLogFiles } from './server-log-files'
 
 const logSettingsSchema = z.object({
@@ -53,6 +54,12 @@ const logSettingsSchema = z.object({
   log_setting: z.object({
     user_export_enabled: z.boolean(),
     max_range_days: z.number().int().min(1),
+    request_capture_enabled: z.boolean(),
+    request_capture_original: z.boolean(),
+    request_capture_upstream: z.boolean(),
+    request_capture_response: z.boolean(),
+    request_capture_max_body_kb: z.number().int().min(1),
+    request_capture_retention_days: z.number().int().min(1),
   }),
 })
 
@@ -63,6 +70,12 @@ type LogSettingsSectionProps = {
     LogConsumeEnabled: boolean
     'log_setting.user_export_enabled': boolean
     'log_setting.max_range_days': number
+    'log_setting.request_capture_enabled': boolean
+    'log_setting.request_capture_original': boolean
+    'log_setting.request_capture_upstream': boolean
+    'log_setting.request_capture_response': boolean
+    'log_setting.request_capture_max_body_kb': number
+    'log_setting.request_capture_retention_days': number
   }
 }
 
@@ -78,6 +91,18 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
         user_export_enabled:
           props.defaultValues['log_setting.user_export_enabled'],
         max_range_days: props.defaultValues['log_setting.max_range_days'],
+        request_capture_enabled:
+          props.defaultValues['log_setting.request_capture_enabled'],
+        request_capture_original:
+          props.defaultValues['log_setting.request_capture_original'],
+        request_capture_upstream:
+          props.defaultValues['log_setting.request_capture_upstream'],
+        request_capture_response:
+          props.defaultValues['log_setting.request_capture_response'],
+        request_capture_max_body_kb:
+          props.defaultValues['log_setting.request_capture_max_body_kb'],
+        request_capture_retention_days:
+          props.defaultValues['log_setting.request_capture_retention_days'],
       },
     }),
     [props.defaultValues]
@@ -99,6 +124,30 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
         values.log_setting.user_export_enabled,
       ],
       ['log_setting.max_range_days', values.log_setting.max_range_days],
+      [
+        'log_setting.request_capture_enabled',
+        values.log_setting.request_capture_enabled,
+      ],
+      [
+        'log_setting.request_capture_original',
+        values.log_setting.request_capture_original,
+      ],
+      [
+        'log_setting.request_capture_upstream',
+        values.log_setting.request_capture_upstream,
+      ],
+      [
+        'log_setting.request_capture_response',
+        values.log_setting.request_capture_response,
+      ],
+      [
+        'log_setting.request_capture_max_body_kb',
+        values.log_setting.request_capture_max_body_kb,
+      ],
+      [
+        'log_setting.request_capture_retention_days',
+        values.log_setting.request_capture_retention_days,
+      ],
     ] as const
     for (const [key, value] of changes) {
       if (value === props.defaultValues[key]) continue
@@ -146,6 +195,74 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
                 </SettingsSwitchItem>
               )}
             />
+            <FormField
+              control={form.control}
+              name='log_setting.request_capture_enabled'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('Record request details')}</FormLabel>
+                    <FormDescription>
+                      {t('Store bounded request and upstream response bodies for administrators.')}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                  <FormMessage />
+                </SettingsSwitchItem>
+              )}
+            />
+            <SettingsFormGrid>
+              {(
+                [
+                  ['request_capture_original', 'Record original request body'],
+                  ['request_capture_upstream', 'Record upstream request body'],
+                  ['request_capture_response', 'Record upstream response body'],
+                ] as const
+              ).map(([name, label]) => (
+                <FormField
+                  key={name}
+                  control={form.control}
+                  name={`log_setting.${name}`}
+                  render={({ field }) => (
+                    <SettingsSwitchItem>
+                      <FormLabel>{t(label)}</FormLabel>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                      <FormMessage />
+                    </SettingsSwitchItem>
+                  )}
+                />
+              ))}
+              <FormField
+                control={form.control}
+                name='log_setting.request_capture_max_body_kb'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Maximum captured body size (KB)')}</FormLabel>
+                    <FormControl>
+                      <Input type='number' min={1} step={1} {...safeNumberFieldProps(field)} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='log_setting.request_capture_retention_days'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Request capture retention (days)')}</FormLabel>
+                    <FormControl>
+                      <Input type='number' min={1} step={1} {...safeNumberFieldProps(field)} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </SettingsFormGrid>
           </div>
 
           <Separator />
@@ -213,6 +330,10 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
       <Separator />
 
       <HistoryLogCleanup />
+
+      <Separator />
+
+      <RequestCaptureManagement />
 
       <Separator />
 

@@ -64,6 +64,20 @@ func seedExportLogs(t *testing.T, mainDB *gorm.DB, logDB *gorm.DB, now int64) {
 	for i := range logs {
 		require.NoError(t, logDB.Create(&logs[i]).Error)
 	}
+	require.NoError(t, logDB.Create(&model.RequestCapture{
+		Id:                  1001,
+		RequestId:           "a-1",
+		CreatedAt:           now - 3600,
+		UserId:              1,
+		Username:            "alice",
+		ModelName:           "gpt-a",
+		ChannelId:           9,
+		ChannelName:         "primary",
+		Attempt:             1,
+		RequestBody:         `{"prompt":"hello"}`,
+		UpstreamRequestBody: `{"input":"hello"}`,
+		ResponseBody:        `{"ok":true}`,
+	}).Error)
 }
 
 func useLogExportDatabases(t *testing.T, mainDB *gorm.DB, logDB *gorm.DB, mainType common.DatabaseType, logType common.DatabaseType) {
@@ -75,9 +89,23 @@ func useLogExportDatabases(t *testing.T, mainDB *gorm.DB, logDB *gorm.DB, mainTy
 	common.SetDatabaseTypes(mainType, logType)
 	common.RedisEnabled, common.MemoryCacheEnabled = false, false
 	t.Cleanup(func() {
+		activeDBs := map[*gorm.DB]struct{}{
+			mainDB:       {},
+			logDB:        {},
+			model.DB:     {},
+			model.LOG_DB: {},
+		}
 		model.DB, model.LOG_DB = previousDB, previousLogDB
 		common.SetDatabaseTypes(previousMain, previousLog)
 		common.RedisEnabled, common.MemoryCacheEnabled = previousRedis, previousMemory
+		for db := range activeDBs {
+			if db == nil {
+				continue
+			}
+			if sqlDB, err := db.DB(); err == nil {
+				_ = sqlDB.Close()
+			}
+		}
 	})
 }
 
@@ -112,7 +140,7 @@ func TestLogExportDatabaseMatrix(t *testing.T) {
 				t.Setenv("LOG_SQL_DSN", isolatedDSN)
 				require.NoError(t, model.InitLogDB())
 			} else {
-				require.NoError(t, db.AutoMigrate(&model.Log{}))
+				require.NoError(t, db.AutoMigrate(&model.Log{}, &model.RequestCapture{}))
 			}
 			versionSQL := "SELECT version()"
 			if tc.kind == "sqlite" {
@@ -145,6 +173,11 @@ func TestLogExportDatabaseMatrix(t *testing.T) {
 			assert.Equal(t, []any{"a-2", "b-1", "a-1"}, exportedRequestIds(all))
 			assert.Equal(t, "primary", all[2]["channel_name"])
 			assert.Contains(t, all[2]["other"], "admin_info")
+			captures, ok := all[2]["request_captures"].([]any)
+			require.True(t, ok)
+			require.Len(t, captures, 1)
+			assert.Contains(t, captures[0].(map[string]any)["request_body"], "hello")
+			assert.NotContains(t, own[1], "request_captures")
 			assert.Equal(t, true, all[3]["success"])
 		})
 	}
@@ -154,7 +187,7 @@ func TestLogExportRules(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, _ := newAuditTestDatabase(t, "sqlite", "")
 	useLogExportDatabases(t, db, db, common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
-	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Log{}, &model.QuotaData{}))
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Log{}, &model.RequestCapture{}, &model.QuotaData{}))
 	now := time.Now().Unix()
 	seedExportLogs(t, db, db, now)
 	logSetting := operation_setting.GetLogSetting()
