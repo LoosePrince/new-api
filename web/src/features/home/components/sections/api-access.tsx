@@ -36,28 +36,34 @@ export function ApiAccess() {
 
   if (!status) return null
 
-  const configuredBase = status.server_address
+  const configuredApiInfo = Array.isArray(status.api_info)
+    ? (status.api_info as ApiInfoItem[]).filter((item) =>
+        Boolean(item && typeof item.url === 'string' && item.url.trim())
+      )
+    : []
+  const configuredApiAddress = configuredApiInfo[0]?.url
+  const configuredServerAddress =
+    typeof status.server_address === 'string'
+      ? status.server_address.trim()
+      : ''
+  const apiAddress = (
+    configuredApiAddress?.trim() || configuredServerAddress
+  ).replace(/\/+$/, '')
   const apiBase =
-    typeof configuredBase === 'string' && configuredBase.trim()
-      ? configuredBase.trim().replace(/\/+$/, '')
-      : window.location.origin
+    !apiAddress || apiAddress === 'http://localhost:3000'
+      ? window.location.origin
+      : apiAddress
   const endpointPrefix =
     typeof status.public_api_endpoint === 'string' &&
     status.public_api_endpoint !== '/'
       ? status.public_api_endpoint.replace(/\/+$/, '')
       : ''
-  const configuredRoutes = Array.isArray(status.api_info)
-    ? (status.api_info as ApiInfoItem[])
-    : []
-  const routes: ApiInfoItem[] =
-    configuredRoutes.length > 0
-      ? configuredRoutes
-      : DEFAULT_API_ROUTES.map((item) => ({
-          route: item.route,
-          url: `${apiBase}${endpointPrefix}${item.path}`,
-          description: '',
-          color: 'blue',
-        }))
+  const routes: ApiInfoItem[] = DEFAULT_API_ROUTES.map((item) => ({
+    route: item.route,
+    url: `${apiBase}${endpointPrefix}${item.path}`,
+    description: '',
+    color: 'blue',
+  }))
   const apiRequiresKey = status.public_api_require_key !== false
   const apiAllowNoModel = status.public_api_allow_no_model === true
   const hasFallback = status.public_api_has_fallback === true

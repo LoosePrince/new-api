@@ -34,12 +34,13 @@ describe('homepage API access', () => {
     statusHook.mockReturnValue({
       status: {
         api_info_enabled: true,
-        server_address: 'https://gateway.example.com/',
+        server_address: 'http://localhost:3000',
+        public_api_endpoint: '/group-api',
         api_info: [
           {
-            url: 'https://gateway.example.com/v1/chat/completions',
-            route: 'POST /v1/chat/completions',
-            description: 'Chat completions',
+            url: 'https://api.example.com',
+            route: 'Configured route',
+            description: 'Configured description',
             color: 'green',
           },
         ],
@@ -51,16 +52,18 @@ describe('homepage API access', () => {
 
     render(<ApiAccess />)
 
-    expect(screen.getByText('https://gateway.example.com')).toBeInTheDocument()
+    expect(screen.getByText('https://api.example.com')).toBeInTheDocument()
     expect(screen.getByText('POST /v1/chat/completions')).toBeInTheDocument()
+    expect(screen.getByText('POST /v1/messages')).toBeInTheDocument()
+    expect(screen.queryByText('Configured route')).not.toBeInTheDocument()
     expect(screen.getByText(/任意字符|Any API key value/i)).toBeInTheDocument()
     expect(
       screen.getByText(/支持相近模型名称|Similar model names are supported/i)
     ).toBeInTheDocument()
+    expect(screen.getByText(/模型请求失败|model failure/i)).toBeInTheDocument()
     expect(
-      screen.getByText(/模型请求失败|model failure/i)
-    ).toBeInTheDocument()
-    expect(screen.queryByText(/public-model|smart-model|fallback-model|backup/)).toBeNull()
+      screen.queryByText(/public-model|smart-model|fallback-model|backup/)
+    ).toBeNull()
     expect(screen.queryByText('/v1/messages')).not.toBeInTheDocument()
   })
 
@@ -87,6 +90,19 @@ describe('homepage API access', () => {
     expect(
       screen.getByText(/未配置模型自动回退|No automatic model fallback/i)
     ).toBeInTheDocument()
+  })
+
+  it('uses the current site when the server address is the default localhost URL', () => {
+    statusHook.mockReturnValue({
+      status: {
+        server_address: 'http://localhost:3000/',
+        api_info: [],
+      },
+    })
+
+    render(<ApiAccess />)
+
+    expect(screen.getByText(window.location.origin)).toBeInTheDocument()
   })
 
   it('shows built-in routes when no custom route list is configured', () => {
