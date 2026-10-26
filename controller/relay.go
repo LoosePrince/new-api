@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -69,9 +70,46 @@ func geminiRelayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewA
 	return err
 }
 
+type requestReuseResponseWriter struct {
+	gin.ResponseWriter
+	body      bytes.Buffer
+	maxBytes  int
+	truncated bool
+}
+
+func (w *requestReuseResponseWriter) Write(data []byte) (int, error) {
+	if w.body.Len() < w.maxBytes {
+		remaining := w.maxBytes - w.body.Len()
+		if len(data) > remaining {
+			_, _ = w.body.Write(data[:remaining])
+			w.truncated = true
+		} else {
+			_, _ = w.body.Write(data)
+		}
+	} else if len(data) > 0 {
+		w.truncated = true
+	}
+	return w.ResponseWriter.Write(data)
+}
+
+func (w *requestReuseResponseWriter) WriteString(data string) (int, error) {
+	return w.Write([]byte(data))
+}
+
 func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	requestId := c.GetString(common.RequestIdKey)
+	captureWriter := &requestReuseResponseWriter{ResponseWriter: c.Writer, maxBytes: int(operation_setting.GetLogSetting().RequestCaptureMaxBodyKB) * 1024}
+	if captureWriter.maxBytes < 1 {
+		captureWriter.maxBytes = 256 * 1024
+	}
+	logSettings := operation_setting.GetLogSetting()
+	if logSettings.RequestCaptureEnabled && logSettings.RequestCacheEnabled && logSettings.RequestCaptureResponse {
+		c.Writer = captureWriter
+		defer func() {
+			model.RecordRequestCaptureReplayResponse(c, captureWriter.body.Bytes(), captureWriter.Status(), captureWriter.Header().Get("Content-Type"), captureWriter.truncated)
+		}()
+	}
 	//group := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 	//originalModel := common.GetContextKeyString(c, constant.ContextKeyOriginalModel)
 
@@ -159,6 +197,15 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	if relayFormat == types.RelayFormatClaude && relayInfo.IsStream && generalSettings.PingIntervalEnabled {
 		stopKeepAlive := helper.StartStreamKeepAlive(c, time.Duration(generalSettings.PingIntervalSeconds)*time.Second)
 		defer stopKeepAlive()
+	}
+
+	if source, cacheErr := model.FindReusableRequestCapture(c); cacheErr == nil && source != nil && source.ReplayBody != "" {
+		model.BeginCachedRequestCapture(c, relayInfo.UserId, c.GetString("username"), relayInfo.OriginModelName, source.ChannelId, source)
+		model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, 0)
+		model.RecordCachedConsumeLog(c, relayInfo.UserId, relayInfo.OriginModelName, source)
+		service.MarkRequestPolicySuccess(c, nil)
+		c.Data(source.ResponseStatus, source.ResponseContentType, []byte(source.ReplayBody))
+		return
 	}
 
 	if newAPIError = relay.PrepareRequestBilling(c, relayInfo); newAPIError != nil {

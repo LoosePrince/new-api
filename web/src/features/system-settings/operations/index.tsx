@@ -56,6 +56,7 @@ const defaultOperationsSettings: OperationsSettings = {
   'log_setting.request_capture_original': true,
   'log_setting.request_capture_upstream': true,
   'log_setting.request_capture_response': true,
+  'log_setting.request_cache_enabled': false,
   'log_setting.request_capture_max_body_kb': 256,
   'log_setting.request_capture_retention_days': 30,
   'performance_setting.disk_cache_enabled': false,

@@ -49,6 +49,7 @@ function Fixture() {
             'log_setting.request_capture_original': true,
             'log_setting.request_capture_upstream': true,
             'log_setting.request_capture_response': true,
+            'log_setting.request_cache_enabled': false,
             'log_setting.request_capture_max_body_kb': 256,
             'log_setting.request_capture_retention_days': 30,
           }}
@@ -98,7 +99,7 @@ test('the page shows the four log modules in order, each with its own controls',
     'Server Log Management',
   ])
   const recording = screen.getByRole('group', { name: 'Log recording' })
-  expect(within(recording).getAllByRole('switch')).toHaveLength(6)
+  expect(within(recording).getAllByRole('switch')).toHaveLength(7)
   expect(
     within(recording).getByRole('switch', { name: 'Record quota usage' })
   ).toBeVisible()

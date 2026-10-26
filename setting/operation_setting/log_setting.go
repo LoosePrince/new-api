@@ -27,6 +27,7 @@ type LogSetting struct {
 	RequestCaptureResponse      bool `json:"request_capture_response"`
 	RequestCaptureMaxBodyKB     int  `json:"request_capture_max_body_kb"`
 	RequestCaptureRetentionDays int  `json:"request_capture_retention_days"`
+	RequestCacheEnabled         bool `json:"request_cache_enabled"`
 }
 
 var logSetting = LogSetting{
@@ -53,7 +54,7 @@ func (s *LogSetting) MaxRangeSeconds() int64 {
 
 func ValidateRequestCaptureOption(key, value string) error {
 	switch key {
-	case "log_setting.request_capture_enabled", "log_setting.request_capture_original", "log_setting.request_capture_upstream", "log_setting.request_capture_response":
+	case "log_setting.request_capture_enabled", "log_setting.request_capture_original", "log_setting.request_capture_upstream", "log_setting.request_capture_response", "log_setting.request_cache_enabled":
 		if _, err := strconv.ParseBool(value); err != nil {
 			return common.NewMessage("Invalid request capture setting")
 		}

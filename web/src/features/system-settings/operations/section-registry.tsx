@@ -118,6 +118,8 @@ const OPERATIONS_SECTIONS = [
             settings['log_setting.request_capture_upstream'] ?? true,
           'log_setting.request_capture_response':
             settings['log_setting.request_capture_response'] ?? true,
+          'log_setting.request_cache_enabled':
+            settings['log_setting.request_cache_enabled'] ?? false,
           'log_setting.request_capture_max_body_kb':
             settings['log_setting.request_capture_max_body_kb'] ?? 256,
           'log_setting.request_capture_retention_days':

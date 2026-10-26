@@ -66,6 +66,10 @@ export const usageLogSchema = z.object({
         request_truncated: z.boolean().optional(),
         upstream_truncated: z.boolean().optional(),
         response_truncated: z.boolean().optional(),
+        replay_body: z.string().optional(),
+        replay_truncated: z.boolean().optional(),
+        reuse_source_capture_id: z.number().optional(),
+        reuse_source_invalid: z.boolean().optional(),
       })
     )
     .optional(),

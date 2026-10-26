@@ -241,7 +241,7 @@ func InitLogDB() (err error) {
 			if err := MigrateAuditLogs(); err != nil {
 				return err
 			}
-			return LOG_DB.AutoMigrate(&RequestCapture{})
+			return LOG_DB.AutoMigrate(&RequestCapture{}, &RequestCaptureBody{})
 		}
 		return
 	}
@@ -448,14 +448,20 @@ func migrateClickHouseRequestCaptures() error {
 		response_truncated UInt8 DEFAULT 0,
 		request_body_id Int64 DEFAULT 0,
 		upstream_request_body_id Int64 DEFAULT 0,
-		response_body_id Int64 DEFAULT 0
+		response_body_id Int64 DEFAULT 0,
+		replay_body_id Int64 DEFAULT 0,
+		reuse_key String DEFAULT '',
+		reuse_source_capture_id Int64 DEFAULT 0
 	) ENGINE = MergeTree() PARTITION BY toYYYYMM(toDateTime(created_at)) ORDER BY (created_at, request_id, id)`).Error; err != nil {
 		return err
 	}
 	return LOG_DB.Exec(`ALTER TABLE request_captures
 		ADD COLUMN IF NOT EXISTS request_body_id Int64 DEFAULT 0,
 		ADD COLUMN IF NOT EXISTS upstream_request_body_id Int64 DEFAULT 0,
-		ADD COLUMN IF NOT EXISTS response_body_id Int64 DEFAULT 0`).Error
+		ADD COLUMN IF NOT EXISTS response_body_id Int64 DEFAULT 0,
+		ADD COLUMN IF NOT EXISTS replay_body_id Int64 DEFAULT 0,
+		ADD COLUMN IF NOT EXISTS reuse_key String DEFAULT '',
+		ADD COLUMN IF NOT EXISTS reuse_source_capture_id Int64 DEFAULT 0`).Error
 }
 
 func migrateClickHouseLogDB() error {

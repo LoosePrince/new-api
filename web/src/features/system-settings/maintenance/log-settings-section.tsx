@@ -59,6 +59,7 @@ const logSettingsSchema = z.object({
     request_capture_original: z.boolean(),
     request_capture_upstream: z.boolean(),
     request_capture_response: z.boolean(),
+    request_cache_enabled: z.boolean(),
     request_capture_max_body_kb: z.number().int().min(1),
     request_capture_retention_days: z.number().int().min(1),
   }),
@@ -76,6 +77,7 @@ type LogSettingsSectionProps = {
     'log_setting.request_capture_original': boolean
     'log_setting.request_capture_upstream': boolean
     'log_setting.request_capture_response': boolean
+    'log_setting.request_cache_enabled': boolean
     'log_setting.request_capture_max_body_kb': number
     'log_setting.request_capture_retention_days': number
   }
@@ -102,6 +104,8 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
           props.defaultValues['log_setting.request_capture_upstream'],
         request_capture_response:
           props.defaultValues['log_setting.request_capture_response'],
+        request_cache_enabled:
+          props.defaultValues['log_setting.request_cache_enabled'],
         request_capture_max_body_kb:
           props.defaultValues['log_setting.request_capture_max_body_kb'],
         request_capture_retention_days:
@@ -144,6 +148,7 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
         'log_setting.request_capture_response',
         values.log_setting.request_capture_response,
       ],
+      ['log_setting.request_cache_enabled', values.log_setting.request_cache_enabled],
       [
         'log_setting.request_capture_max_body_kb',
         values.log_setting.request_capture_max_body_kb,
@@ -246,6 +251,29 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
               )}
             />
             <SettingsFormGrid>
+              <FormField
+                control={form.control}
+                name='log_setting.request_cache_enabled'
+                render={({ field }) => (
+                  <SettingsSwitchItem>
+                    <SettingsSwitchContent>
+                      <FormLabel>{t('Reuse cached responses')}</FormLabel>
+                      <FormDescription>
+                        {t(
+                          'Return a previous complete response when request content matches, excluding the model. The cache is shared across all users, requires request details, and does not charge cache hits.'
+                        )}
+                      </FormDescription>
+                    </SettingsSwitchContent>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </SettingsSwitchItem>
+                )}
+              />
               {(
                 [
                   ['request_capture_original', 'Record original request body'],

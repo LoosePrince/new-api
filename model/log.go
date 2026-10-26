@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -342,6 +343,30 @@ type RecordConsumeLogParams struct {
 	IsStream         bool              `json:"is_stream"`
 	Group            string            `json:"group"`
 	Other            *LogOther         `json:"other"`
+}
+
+func RecordCachedConsumeLog(c *gin.Context, userID int, modelName string, source *RequestCapture) {
+	if c == nil || source == nil || !common.LogConsumeEnabled {
+		return
+	}
+	other := NewLogOther()
+	other.SetPublic("cache_hit", true)
+	other.SetPublic("cache_source_capture_id", source.Id)
+	other.SetPublic("cache_source_request_id", source.RequestId)
+	RecordConsumeLog(c, userID, RecordConsumeLogParams{
+		ChannelId:        source.ChannelId,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		ModelName:        modelName,
+		TokenName:        c.GetString("token_name"),
+		Quota:            0,
+		Content:          []*common.Message{common.NewMessage("Response reused from cache", nil)},
+		TokenId:          common.GetContextKeyInt(c, constant.ContextKeyTokenId),
+		UseTimeSeconds:   0,
+		IsStream:         common.GetContextKeyBool(c, constant.ContextKeyIsStream),
+		Group:            common.GetContextKeyString(c, constant.ContextKeyUsingGroup),
+		Other:            other,
+	})
 }
 
 func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) {

@@ -9,6 +9,35 @@ import (
 	"gorm.io/gorm"
 )
 
+func TestRequestCaptureReuseKeyIgnoresModel(t *testing.T) {
+	first, valid := requestCaptureReuseKey([]byte(`{"model":"gpt-4o","messages":[{"role":"user","content":"hello"}]}`))
+	require.True(t, valid)
+	second, valid := requestCaptureReuseKey([]byte(`{"model":"claude-3-7-sonnet","messages":[{"role":"user","content":"hello"}]}`))
+	require.True(t, valid)
+	assert.Equal(t, first, second)
+
+	different, valid := requestCaptureReuseKey([]byte(`{"model":"gpt-4o","messages":[{"role":"user","content":"goodbye"}]}`))
+	require.True(t, valid)
+	assert.NotEqual(t, first, different)
+}
+
+func TestReplayBodyHydratesWithoutUpstreamResponse(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&RequestCapture{}, &RequestCaptureBody{}))
+	previous := LOG_DB
+	LOG_DB = db
+	t.Cleanup(func() { LOG_DB = previous })
+
+	bodyID, err := storeRequestCaptureBody(requestCaptureBody{data: []byte(`{"id":"cached"}`)})
+	require.NoError(t, err)
+	capture := &RequestCapture{Id: 1, ReplayBodyId: bodyID, ReuseSourceCaptureId: 99}
+	require.NoError(t, db.Create(capture).Error)
+	require.NoError(t, hydrateRequestCaptureBodies([]*RequestCapture{capture}))
+	assert.Equal(t, `{"id":"cached"}`, capture.ReplayBody)
+	assert.True(t, capture.ReuseSourceInvalid)
+}
+
 func TestRequestCaptureBodiesDeduplicateAndHydrate(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)

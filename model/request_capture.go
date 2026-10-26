@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -20,6 +21,8 @@ import (
 )
 
 const requestCaptureContextKey = "request_capture_id"
+const requestCaptureReuseKeyContextKey = "request_capture_reuse_key"
+const requestCaptureReuseSourceContextKey = "request_capture_reuse_source"
 
 const requestCaptureCleanupInterval = time.Hour
 
@@ -73,27 +76,34 @@ func scheduleRequestCaptureCleanup(retentionDays int) {
 // RequestCapture stores one bounded upstream attempt. Bodies are intentionally
 // kept outside logs so normal list and export queries remain small.
 type RequestCapture struct {
-	Id                    int64  `json:"id" gorm:"primaryKey"`
-	RequestId             string `json:"request_id" gorm:"index;type:varchar(64)"`
-	UpstreamRequestId     string `json:"upstream_request_id" gorm:"index;type:varchar(128)"`
-	CreatedAt             int64  `json:"created_at" gorm:"index"`
-	UserId                int    `json:"user_id" gorm:"index"`
-	Username              string `json:"username" gorm:"index;default:''"`
-	ModelName             string `json:"model_name" gorm:"index;default:''"`
-	ChannelId             int    `json:"channel_id" gorm:"index"`
-	ChannelName           string `json:"channel_name" gorm:"default:''"`
-	Attempt               int    `json:"attempt"`
-	RequestBody           string `json:"request_body,omitempty" gorm:"type:text"`
-	UpstreamRequestBody   string `json:"upstream_request_body,omitempty" gorm:"type:text"`
-	ResponseBody          string `json:"response_body,omitempty" gorm:"type:text"`
-	ResponseStatus        int    `json:"response_status,omitempty"`
-	ResponseContentType   string `json:"response_content_type,omitempty" gorm:"type:varchar(255)"`
-	RequestTruncated      bool   `json:"request_truncated,omitempty"`
-	UpstreamTruncated     bool   `json:"upstream_truncated,omitempty"`
-	ResponseTruncated     bool   `json:"response_truncated,omitempty"`
-	RequestBodyId         int64  `json:"-" gorm:"index"`
-	UpstreamRequestBodyId int64  `json:"-" gorm:"index"`
-	ResponseBodyId        int64  `json:"-" gorm:"index"`
+	Id                    int64           `json:"id" gorm:"primaryKey"`
+	RequestId             string          `json:"request_id" gorm:"index;type:varchar(64)"`
+	UpstreamRequestId     string          `json:"upstream_request_id" gorm:"index;type:varchar(128)"`
+	CreatedAt             int64           `json:"created_at" gorm:"index"`
+	UserId                int             `json:"user_id" gorm:"index"`
+	Username              string          `json:"username" gorm:"index;default:''"`
+	ModelName             string          `json:"model_name" gorm:"index;default:''"`
+	ChannelId             int             `json:"channel_id" gorm:"index"`
+	ChannelName           string          `json:"channel_name" gorm:"default:''"`
+	Attempt               int             `json:"attempt"`
+	RequestBody           string          `json:"request_body,omitempty" gorm:"type:text"`
+	UpstreamRequestBody   string          `json:"upstream_request_body,omitempty" gorm:"type:text"`
+	ResponseBody          string          `json:"response_body,omitempty" gorm:"type:text"`
+	ResponseStatus        int             `json:"response_status,omitempty"`
+	ResponseContentType   string          `json:"response_content_type,omitempty" gorm:"type:varchar(255)"`
+	RequestTruncated      bool            `json:"request_truncated,omitempty"`
+	UpstreamTruncated     bool            `json:"upstream_truncated,omitempty"`
+	ResponseTruncated     bool            `json:"response_truncated,omitempty"`
+	RequestBodyId         int64           `json:"-" gorm:"index"`
+	UpstreamRequestBodyId int64           `json:"-" gorm:"index"`
+	ResponseBodyId        int64           `json:"-" gorm:"index"`
+	ReplayBodyId          int64           `json:"-" gorm:"index"`
+	ReuseKey              string          `json:"-" gorm:"index;type:varchar(64)"`
+	ReuseSourceCaptureId  int64           `json:"reuse_source_capture_id,omitempty" gorm:"index"`
+	ReuseSourceInvalid    bool            `json:"reuse_source_invalid,omitempty" gorm:"-"`
+	ReplayBody            string          `json:"replay_body,omitempty" gorm:"-"`
+	ReplayTruncated       bool            `json:"replay_truncated,omitempty" gorm:"-"`
+	ReuseSource           *RequestCapture `json:"reuse_source,omitempty" gorm:"-"`
 }
 
 // RequestCaptureBody stores each distinct captured body once. RequestCapture
@@ -240,6 +250,7 @@ func hydrateRequestCaptureBodies(items []*RequestCapture) error {
 			capture.RequestBodyId,
 			capture.UpstreamRequestBodyId,
 			capture.ResponseBodyId,
+			capture.ReplayBodyId,
 		} {
 			if id > 0 {
 				bodyIDs[id] = struct{}{}
@@ -261,6 +272,28 @@ func hydrateRequestCaptureBodies(items []*RequestCapture) error {
 	for _, body := range bodies {
 		byID[body.Id] = body
 	}
+	sourceIDs := make([]int64, 0)
+	for _, capture := range items {
+		if capture.ReuseSourceCaptureId > 0 {
+			sourceIDs = append(sourceIDs, capture.ReuseSourceCaptureId)
+		}
+	}
+	if len(sourceIDs) > 0 {
+		var existingSourceIDs []int64
+		if err := LOG_DB.Model(&RequestCapture{}).Where("id IN ?", sourceIDs).Pluck("id", &existingSourceIDs).Error; err != nil {
+			return err
+		}
+		existing := make(map[int64]struct{}, len(existingSourceIDs))
+		for _, id := range existingSourceIDs {
+			existing[id] = struct{}{}
+		}
+		for _, capture := range items {
+			if capture.ReuseSourceCaptureId > 0 {
+				_, sourceExists := existing[capture.ReuseSourceCaptureId]
+				capture.ReuseSourceInvalid = !sourceExists
+			}
+		}
+	}
 	for _, capture := range items {
 		if body, ok := byID[capture.RequestBodyId]; ok {
 			capture.RequestBody = body.Body
@@ -274,8 +307,124 @@ func hydrateRequestCaptureBodies(items []*RequestCapture) error {
 			capture.ResponseBody = body.Body
 			capture.ResponseTruncated = body.Truncated
 		}
+		if body, ok := byID[capture.ReplayBodyId]; ok {
+			capture.ReplayBody = body.Body
+			capture.ReplayTruncated = body.Truncated
+		}
 	}
 	return nil
+}
+
+func requestCaptureReuseEnabled() bool {
+	settings := operation_setting.GetLogSetting()
+	return settings.RequestCaptureEnabled && settings.RequestCaptureOriginal &&
+		settings.RequestCaptureResponse && settings.RequestCacheEnabled
+}
+
+func requestCaptureReuseKey(data []byte) (string, bool) {
+	if len(data) == 0 {
+		return "", false
+	}
+
+	var object map[string]json.RawMessage
+	canonical := data
+	if err := common.Unmarshal(data, &object); err == nil && object != nil {
+		delete(object, "model")
+		encoded, err := common.Marshal(object)
+		if err != nil {
+			return "", false
+		}
+		canonical = encoded
+	}
+	digest := sha256.Sum256(canonical)
+	return hex.EncodeToString(digest[:]), true
+}
+
+func requestCaptureReuseKeyFromContext(c *gin.Context) (string, bool) {
+	if c == nil || !requestCaptureReuseEnabled() {
+		return "", false
+	}
+	body, ok := captureOriginalBody(c, requestCaptureLimit())
+	if !ok || body.truncated {
+		return "", false
+	}
+	key, valid := requestCaptureReuseKey(body.data)
+	if !valid {
+		return "", false
+	}
+	path := ""
+	method := ""
+	if c.Request != nil && c.Request.URL != nil {
+		path = c.Request.URL.RequestURI()
+		method = c.Request.Method
+	}
+	digest := sha256.Sum256([]byte(method + "\n" + path + "\n" + key))
+	key = hex.EncodeToString(digest[:])
+	c.Set(requestCaptureReuseKeyContextKey, key)
+	return key, true
+}
+
+// FindReusableRequestCapture returns the newest complete successful client
+// response whose canonical request body matches the current request with model
+// removed. Cache rows are excluded so a replay can never chain indefinitely.
+func FindReusableRequestCapture(c *gin.Context) (*RequestCapture, error) {
+	key, ok := requestCaptureReuseKeyFromContext(c)
+	if !ok {
+		return nil, nil
+	}
+	var capture RequestCapture
+	err := LOG_DB.Where("reuse_key = ? AND reuse_source_capture_id = 0 AND replay_body_id > 0", key).
+		Where("response_status >= ? AND response_status < ?", http.StatusOK, http.StatusMultipleChoices).
+		Order("created_at desc, id desc").First(&capture).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := hydrateRequestCaptureBodies([]*RequestCapture{&capture}); err != nil {
+		return nil, err
+	}
+	if capture.ReplayBody == "" || capture.ReplayTruncated {
+		return nil, nil
+	}
+	return &capture, nil
+}
+
+// BeginCachedRequestCapture creates a request-record row that reuses all body
+// references from the source instead of inserting duplicate body content.
+func BeginCachedRequestCapture(c *gin.Context, userID int, username, modelName string, channelID int, source *RequestCapture) {
+	if c == nil || source == nil || !requestCaptureReuseEnabled() {
+		return
+	}
+	capture := &RequestCapture{
+		Id:                    nextRequestCaptureID(),
+		RequestId:             c.GetString(common.RequestIdKey),
+		UpstreamRequestId:     source.UpstreamRequestId,
+		CreatedAt:             common.GetTimestamp(),
+		UserId:                userID,
+		Username:              username,
+		ModelName:             modelName,
+		ChannelId:             channelID,
+		ChannelName:           source.ChannelName,
+		Attempt:               1,
+		ResponseStatus:        source.ResponseStatus,
+		ResponseContentType:   source.ResponseContentType,
+		ResponseTruncated:     source.ResponseTruncated,
+		RequestBodyId:         source.RequestBodyId,
+		UpstreamRequestBodyId: source.UpstreamRequestBodyId,
+		ResponseBodyId:        source.ResponseBodyId,
+		ReplayBodyId:          source.ReplayBodyId,
+		ReuseKey:              source.ReuseKey,
+		ReuseSourceCaptureId:  source.Id,
+	}
+	if err := LOG_DB.Create(capture).Error; err != nil {
+		common.SysLog(common.LogText("failed to record cached request capture: %s", err.Error()))
+		return
+	}
+	c.Set(requestCaptureContextKey, capture.Id)
+	c.Set(requestCaptureReuseKeyContextKey, source.ReuseKey)
+	c.Set(requestCaptureReuseSourceContextKey, source.Id)
 }
 
 // BeginRequestCapture creates a row for the current upstream attempt and keeps
@@ -307,6 +456,11 @@ func BeginRequestCapture(c *gin.Context, userID int, username, modelName string,
 				capture.RequestBody = string(body.data)
 				capture.RequestTruncated = body.truncated
 			} else {
+				if !body.truncated && settings.RequestCacheEnabled {
+					if key, valid := requestCaptureReuseKeyFromContext(c); valid {
+						capture.ReuseKey = key
+					}
+				}
 				capture.RequestBodyId = bodyID
 			}
 		}
@@ -368,6 +522,41 @@ func UpdateRequestCaptureResponse(id int64, body string, status int, contentType
 	}
 }
 
+func RecordRequestCaptureReplayResponse(c *gin.Context, body []byte, status int, contentType string, truncated bool) {
+	if c == nil || !requestCaptureReuseEnabled() {
+		return
+	}
+	id := RequestCaptureID(c)
+	if id == 0 {
+		return
+	}
+	key, _ := c.Get(requestCaptureReuseKeyContextKey)
+	if key == nil {
+		key, _ = requestCaptureReuseKeyFromContext(c)
+	}
+	keyString, _ := key.(string)
+	if keyString == "" || truncated || status < http.StatusOK || status >= http.StatusMultipleChoices {
+		return
+	}
+	if c.GetInt64(requestCaptureReuseSourceContextKey) > 0 {
+		return
+	}
+	bodyID, err := storeRequestCaptureBody(requestCaptureBody{data: body})
+	if err != nil {
+		common.SysLog(common.LogText("failed to store reusable response body: %s", err.Error()))
+		return
+	}
+	updates := map[string]any{
+		"reuse_key":             keyString,
+		"replay_body_id":        bodyID,
+		"response_status":       status,
+		"response_content_type": contentType,
+	}
+	if err := LOG_DB.Model(&RequestCapture{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+		common.SysLog(common.LogText("failed to index reusable response: %s", err.Error()))
+	}
+}
+
 func SetRequestCaptureUpstreamRequestID(c *gin.Context, id string) {
 	if c == nil || id == "" {
 		return
@@ -416,6 +605,7 @@ func requestCaptureBodyIDs(captures []RequestCapture) []int64 {
 			capture.RequestBodyId,
 			capture.UpstreamRequestBodyId,
 			capture.ResponseBodyId,
+			capture.ReplayBodyId,
 		} {
 			if id > 0 {
 				seen[id] = struct{}{}
@@ -434,14 +624,14 @@ func deleteUnusedRequestCaptureBodies(ctx context.Context, ids []int64) error {
 		return nil
 	}
 	var references []RequestCapture
-	if err := LOG_DB.WithContext(ctx).Select("request_body_id, upstream_request_body_id, response_body_id").
-		Where("request_body_id IN ? OR upstream_request_body_id IN ? OR response_body_id IN ?", ids, ids, ids).
+	if err := LOG_DB.WithContext(ctx).Select("request_body_id, upstream_request_body_id, response_body_id, replay_body_id").
+		Where("request_body_id IN ? OR upstream_request_body_id IN ? OR response_body_id IN ? OR replay_body_id IN ?", ids, ids, ids, ids).
 		Find(&references).Error; err != nil {
 		return err
 	}
-	used := make(map[int64]struct{}, len(references)*3)
+	used := make(map[int64]struct{}, len(references)*4)
 	for _, capture := range references {
-		for _, id := range []int64{capture.RequestBodyId, capture.UpstreamRequestBodyId, capture.ResponseBodyId} {
+		for _, id := range []int64{capture.RequestBodyId, capture.UpstreamRequestBodyId, capture.ResponseBodyId, capture.ReplayBodyId} {
 			if id > 0 {
 				used[id] = struct{}{}
 			}
@@ -491,7 +681,7 @@ func DeleteOldRequestCaptures(ctx context.Context, targetTimestamp int64) (int64
 		return 0, nil
 	}
 	var captures []RequestCapture
-	if err := query.Select("request_body_id, upstream_request_body_id, response_body_id").Find(&captures).Error; err != nil {
+	if err := query.Select("request_body_id, upstream_request_body_id, response_body_id, replay_body_id").Find(&captures).Error; err != nil {
 		return 0, err
 	}
 	bodyIDs := requestCaptureBodyIDs(captures)
@@ -522,7 +712,7 @@ func DeleteAllRequestCaptures(ctx context.Context) (int64, error) {
 		return 0, nil
 	}
 	var captures []RequestCapture
-	if err := query.Select("request_body_id, upstream_request_body_id, response_body_id").Find(&captures).Error; err != nil {
+	if err := query.Select("request_body_id, upstream_request_body_id, response_body_id, replay_body_id").Find(&captures).Error; err != nil {
 		return 0, err
 	}
 	bodyIDs := requestCaptureBodyIDs(captures)

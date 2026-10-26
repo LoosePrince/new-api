@@ -303,6 +303,10 @@ export interface RequestCapture {
   request_truncated?: boolean
   upstream_truncated?: boolean
   response_truncated?: boolean
+  replay_body?: string
+  replay_truncated?: boolean
+  reuse_source_capture_id?: number
+  reuse_source_invalid?: boolean
 }
 
 export interface LogStatistics {

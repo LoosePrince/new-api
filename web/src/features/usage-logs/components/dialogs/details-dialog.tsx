@@ -1103,6 +1103,11 @@ export function DetailsDialog(props: DetailsDialogProps) {
                       value={`${capture.attempt} · #${capture.channel_id}${capture.channel_name ? ` (${capture.channel_name})` : ''}`}
                       mono
                     />
+                    {capture.reuse_source_invalid && (
+                      <p className='text-xs text-rose-600'>
+                        {t('Source request data is no longer available')}
+                      </p>
+                    )}
                     {capture.response_status != null && (
                       <DetailRow
                         label={t('Response status')}

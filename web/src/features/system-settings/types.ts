@@ -403,6 +403,7 @@ export type OperationsSettings = {
   'log_setting.request_capture_original': boolean
   'log_setting.request_capture_upstream': boolean
   'log_setting.request_capture_response': boolean
+  'log_setting.request_cache_enabled': boolean
   'log_setting.request_capture_max_body_kb': number
   'log_setting.request_capture_retention_days': number
   'performance_setting.disk_cache_enabled': boolean
