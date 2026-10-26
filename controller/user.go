@@ -1427,7 +1427,7 @@ func UpdateUserSetting(c *gin.Context) {
 	settings.NotifyType = req.QuotaWarningType
 	settings.QuotaWarningThreshold = req.QuotaWarningThreshold
 	settings.AcceptUnsetRatioModel = req.AcceptUnsetModelRatioModel
-	settings.RecordIpLog = req.RecordIpLog
+	settings.RecordIpLog = req.RecordIpLog || operation_setting.GetLogSetting().ForceRecordIP
 	if req.QuotaWarningEnabled != nil {
 		settings.QuotaWarningEnabled = req.QuotaWarningEnabled
 	}

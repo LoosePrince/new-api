@@ -16,7 +16,11 @@ type LogSetting struct {
 	UserExportEnabled bool `json:"user_export_enabled"`
 	// MaxRangeDays is the longest time range a user can search in their logs
 	// and dashboard, and the longest range any export can cover.
-	MaxRangeDays                int  `json:"max_range_days"`
+	MaxRangeDays int `json:"max_range_days"`
+	// ForceRecordIP makes request and error logs always keep the client IP,
+	// regardless of each user's record_ip_log privacy setting.
+	ForceRecordIP bool `json:"force_record_ip"`
+
 	RequestCaptureEnabled       bool `json:"request_capture_enabled"`
 	RequestCaptureOriginal      bool `json:"request_capture_original"`
 	RequestCaptureUpstream      bool `json:"request_capture_upstream"`

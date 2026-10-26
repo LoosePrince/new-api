@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { IPBlacklistSection } from '../request-limits/ip-blacklist-section'
 import { RateLimitSection } from '../request-limits/rate-limit-section'
 import { SSRFSection } from '../request-limits/ssrf-section'
 import { TokenLimitSection } from '../request-limits/token-limit-section'
@@ -73,6 +74,20 @@ const SECURITY_SECTIONS = [
         defaultValues={{
           'token_setting.max_user_tokens':
             settings['token_setting.max_user_tokens'],
+        }}
+      />
+    ),
+  },
+  {
+    id: 'ip-blacklist',
+    titleKey: 'IP Blacklist',
+    build: (settings: SecuritySettings) => (
+      <IPBlacklistSection
+        defaultValues={{
+          'ip_blacklist_setting.enabled':
+            settings['ip_blacklist_setting.enabled'],
+          'ip_blacklist_setting.ip_list':
+            settings['ip_blacklist_setting.ip_list'],
         }}
       />
     ),

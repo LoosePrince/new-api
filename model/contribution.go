@@ -18,16 +18,17 @@ type ContributorOverview struct {
 
 func GetContributorOverview(contributorID int) (*ContributorOverview, error) {
 	overview := &ContributorOverview{ModelRanking: []ContributorModelUsage{}}
-	channelQuery := DB.Model(&Channel{}).Where("contributor_id = ?", contributorID)
-	if err := channelQuery.Count(&overview.ChannelCount).Error; err != nil {
+	if err := contributorScopedChannels(DB, contributorID).Count(&overview.ChannelCount).Error; err != nil {
 		return nil, err
 	}
-	if err := channelQuery.Where("status = ?", common.ChannelStatusEnabled).Count(&overview.EnabledChannelCount).Error; err != nil {
+	if err := contributorScopedChannels(DB, contributorID).
+		Where("status = ?", common.ChannelStatusEnabled).
+		Count(&overview.EnabledChannelCount).Error; err != nil {
 		return nil, err
 	}
 
 	var channelIDs []int
-	if err := channelQuery.Pluck("id", &channelIDs).Error; err != nil {
+	if err := contributorScopedChannels(DB, contributorID).Pluck("id", &channelIDs).Error; err != nil {
 		return nil, err
 	}
 	if len(channelIDs) == 0 {

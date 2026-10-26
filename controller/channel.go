@@ -1147,7 +1147,7 @@ func UpdateChannel(c *gin.Context) {
 			common.ApiErrorT(c, "Contributors cannot configure channel status")
 			return
 		}
-		originChannel, err = model.GetContributorChannel(c.GetInt("id"), channel.Id, true)
+		originChannel, err = model.GetContributorChannel(contributorScopeID(c), channel.Id, true)
 		if err != nil {
 			common.ApiErrorT(c, "Channel does not exist")
 			return

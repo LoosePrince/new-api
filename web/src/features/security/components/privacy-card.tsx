@@ -29,6 +29,7 @@ import { TitledCard } from '@/components/ui/titled-card'
 import { updateUserSettings } from '@/features/profile/api'
 import { parseUserSettings } from '@/features/profile/lib/format'
 import type { UserProfile } from '@/features/profile/types'
+import { useStatus } from '@/hooks/use-status'
 import { handleServerError } from '@/lib/handle-server-error'
 import { createServerError } from '@/lib/server-error-message'
 
@@ -39,6 +40,8 @@ type PrivacyCardProps = {
 
 export function PrivacyCard(props: PrivacyCardProps) {
   const { t } = useTranslation()
+  const { status } = useStatus()
+  const forcedRecordIp = status?.record_ip_log_forced === true
   const [recordIpLog, setRecordIpLog] = useState(() =>
     Boolean(parseUserSettings(props.profile.setting).record_ip_log)
   )
@@ -73,16 +76,23 @@ export function PrivacyCard(props: PrivacyCardProps) {
         <Label htmlFor='security-record-ip'>{t('Record IP Address')}</Label>
         <Switch
           id='security-record-ip'
-          checked={recordIpLog}
+          checked={forcedRecordIp || recordIpLog}
           onCheckedChange={setRecordIpLog}
-          disabled={save.isPending}
+          disabled={forcedRecordIp || save.isPending}
         />
       </div>
+      {forcedRecordIp && (
+        <p className='text-muted-foreground mt-2 text-sm'>
+          {t(
+            'Your administrator requires IP addresses in request and error logs, so this setting cannot be turned off.'
+          )}
+        </p>
+      )}
       <div className='mt-4 flex justify-end'>
         <Button
           type='button'
           onClick={() => save.mutate()}
-          disabled={save.isPending}
+          disabled={forcedRecordIp || save.isPending}
         >
           {save.isPending && <Loader2 className='size-4 animate-spin' />}
           {save.isPending ? t('Saving...') : t('Save Settings')}

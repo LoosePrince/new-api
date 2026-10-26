@@ -20,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/go-redis/redis/v8"
 
@@ -658,6 +659,32 @@ func TestManageUserQuotaCacheUsesCommittedIntegerDifference(t *testing.T) {
 			}
 		})
 	}
+}
+
+// When an administrator forces IP recording, a user cannot opt out through
+// the settings API.
+func TestUpdateUserSettingKeepsIPRecordingOnWhenTheAdministratorForcesIt(t *testing.T) {
+	db := setupManageUserTestDB(t)
+	logSetting := operation_setting.GetLogSetting()
+	previousForce := logSetting.ForceRecordIP
+	logSetting.ForceRecordIP = true
+	t.Cleanup(func() { logSetting.ForceRecordIP = previousForce })
+
+	setting, err := common.Marshal(dto.UserSetting{RecordIpLog: true})
+	require.NoError(t, err)
+	user := model.User{Username: "forced-ip-owner", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AffCode: "forced-ip-owner-aff", Setting: string(setting)}
+	require.NoError(t, db.Create(&user).Error)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/user/setting", strings.NewReader(`{"notify_type":"email","record_ip_log":false}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set("id", user.Id)
+	UpdateUserSetting(c)
+
+	assert.Contains(t, recorder.Body.String(), `"success":true`)
+	require.NoError(t, db.First(&user, user.Id).Error)
+	assert.True(t, user.GetSetting().RecordIpLog)
 }
 
 // Saving notification settings starts from what the user stored: fields the

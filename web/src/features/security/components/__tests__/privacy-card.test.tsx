@@ -24,6 +24,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { UserProfile } from '@/features/profile/types'
 import { api } from '@/lib/api'
+import { STATUS_QUERY_KEY } from '@/lib/status-query'
 
 import { PrivacyCard } from '../privacy-card'
 
@@ -49,14 +50,19 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function renderPrivacy() {
+function renderPrivacy(
+  options: { recordIpLogForced?: boolean; profile?: UserProfile } = {}
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
+  if (options.recordIpLogForced) {
+    client.setQueryData(STATUS_QUERY_KEY, { record_ip_log_forced: true })
+  }
   const onUpdate = vi.fn()
   const rendered = render(
     <QueryClientProvider client={client}>
-      <PrivacyCard profile={profile} onUpdate={onUpdate} />
+      <PrivacyCard profile={options.profile ?? profile} onUpdate={onUpdate} />
       <Toaster />
     </QueryClientProvider>
   )
@@ -116,5 +122,30 @@ describe('privacy settings', () => {
     expect(
       screen.getByRole('switch', { name: 'Record IP Address' })
     ).not.toBeChecked()
+  })
+
+  it('locks IP recording on when the administrator requires it', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: { success: true, data: profile },
+    })
+    const put = vi.spyOn(api, 'put')
+    renderPrivacy({
+      recordIpLogForced: true,
+      profile: {
+        ...profile,
+        setting: JSON.stringify({ record_ip_log: false }),
+      },
+    })
+
+    const toggle = screen.getByRole('switch', { name: 'Record IP Address' })
+    expect(toggle).toBeChecked()
+    expect(toggle).toHaveAttribute('aria-disabled', 'true')
+    expect(
+      screen.getByText(
+        'Your administrator requires IP addresses in request and error logs, so this setting cannot be turned off.'
+      )
+    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save Settings' })).toBeDisabled()
+    expect(put).not.toHaveBeenCalled()
   })
 })

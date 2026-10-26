@@ -91,6 +91,7 @@ var accessTokenStaticResources = []AccessTokenResource{
 	}},
 	{Resource: "log", LabelKey: "Logs", group: AccessTokenGroupAdmin, minRole: common.RoleAdminUser, Actions: []authz.ActionDefinition{
 		accessTokenView("View all users' usage logs, statistics, and tasks."),
+		accessTokenEdit("Block client IPs recorded in logs."),
 	}},
 	{Resource: "redemption", LabelKey: "Redemption codes", group: AccessTokenGroupAdmin, minRole: common.RoleAdminUser, Actions: []authz.ActionDefinition{
 		accessTokenView("View redemption codes."),

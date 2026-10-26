@@ -53,6 +53,7 @@ const logSettingsSchema = z.object({
   LogConsumeEnabled: z.boolean(),
   log_setting: z.object({
     user_export_enabled: z.boolean(),
+    force_record_ip: z.boolean(),
     max_range_days: z.number().int().min(1),
     request_capture_enabled: z.boolean(),
     request_capture_original: z.boolean(),
@@ -69,6 +70,7 @@ type LogSettingsSectionProps = {
   defaultValues: {
     LogConsumeEnabled: boolean
     'log_setting.user_export_enabled': boolean
+    'log_setting.force_record_ip': boolean
     'log_setting.max_range_days': number
     'log_setting.request_capture_enabled': boolean
     'log_setting.request_capture_original': boolean
@@ -90,6 +92,7 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
       log_setting: {
         user_export_enabled:
           props.defaultValues['log_setting.user_export_enabled'],
+        force_record_ip: props.defaultValues['log_setting.force_record_ip'],
         max_range_days: props.defaultValues['log_setting.max_range_days'],
         request_capture_enabled:
           props.defaultValues['log_setting.request_capture_enabled'],
@@ -123,6 +126,7 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
         'log_setting.user_export_enabled',
         values.log_setting.user_export_enabled,
       ],
+      ['log_setting.force_record_ip', values.log_setting.force_record_ip],
       ['log_setting.max_range_days', values.log_setting.max_range_days],
       [
         'log_setting.request_capture_enabled',
@@ -197,17 +201,45 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
             />
             <FormField
               control={form.control}
+              name='log_setting.force_record_ip'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('Record client IP for all logs')}</FormLabel>
+                    <FormDescription>
+                      {t(
+                        'Always save the client IP in request and error logs. While enabled, users cannot turn off IP recording in their privacy settings.'
+                      )}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </SettingsSwitchItem>
+              )}
+            />
+            <FormField
+              control={form.control}
               name='log_setting.request_capture_enabled'
               render={({ field }) => (
                 <SettingsSwitchItem>
                   <SettingsSwitchContent>
                     <FormLabel>{t('Record request details')}</FormLabel>
                     <FormDescription>
-                      {t('Store bounded request and upstream response bodies for administrators.')}
+                      {t(
+                        'Store bounded request and upstream response bodies for administrators.'
+                      )}
                     </FormDescription>
                   </SettingsSwitchContent>
                   <FormControl>
-                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
                   </FormControl>
                   <FormMessage />
                 </SettingsSwitchItem>
@@ -229,7 +261,10 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
                     <SettingsSwitchItem>
                       <FormLabel>{t(label)}</FormLabel>
                       <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
                       </FormControl>
                       <FormMessage />
                     </SettingsSwitchItem>
@@ -241,9 +276,16 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
                 name='log_setting.request_capture_max_body_kb'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('Maximum captured body size (KB)')}</FormLabel>
+                    <FormLabel>
+                      {t('Maximum captured body size (KB)')}
+                    </FormLabel>
                     <FormControl>
-                      <Input type='number' min={1} step={1} {...safeNumberFieldProps(field)} />
+                      <Input
+                        type='number'
+                        min={1}
+                        step={1}
+                        {...safeNumberFieldProps(field)}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -254,9 +296,16 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
                 name='log_setting.request_capture_retention_days'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('Request capture retention (days)')}</FormLabel>
+                    <FormLabel>
+                      {t('Request capture retention (days)')}
+                    </FormLabel>
                     <FormControl>
-                      <Input type='number' min={1} step={1} {...safeNumberFieldProps(field)} />
+                      <Input
+                        type='number'
+                        min={1}
+                        step={1}
+                        {...safeNumberFieldProps(field)}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

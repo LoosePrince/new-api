@@ -62,20 +62,35 @@ type Channel struct {
 	Keys []string `json:"-" gorm:"-"`
 }
 
+// contributorScopedChannels limits a query to contributor-owned channels.
+// A zero contributor ID means every contributor, which administrators use to
+// review and manage all contribution channels.
+func contributorScopedChannels(db *gorm.DB, contributorID int) *gorm.DB {
+	query := db.Model(&Channel{}).Where("contributor_id > 0")
+	if contributorID > 0 {
+		query = query.Where("contributor_id = ?", contributorID)
+	}
+	return query
+}
+
 func GetContributorChannels(contributorID, offset, limit int) ([]*Channel, int64, error) {
-	var channels []*Channel
 	var total int64
-	query := DB.Model(&Channel{}).Where("contributor_id = ?", contributorID)
-	if err := query.Count(&total).Error; err != nil {
+	if err := contributorScopedChannels(DB, contributorID).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	err := query.Order("id desc").Offset(offset).Limit(limit).Omit("key").Find(&channels).Error
+	var channels []*Channel
+	err := contributorScopedChannels(DB, contributorID).
+		Order("id desc").
+		Offset(offset).
+		Limit(limit).
+		Omit("key").
+		Find(&channels).Error
 	return channels, total, err
 }
 
 func GetContributorChannel(contributorID, channelID int, includeKey bool) (*Channel, error) {
 	channel := &Channel{}
-	query := DB.Where("id = ? AND contributor_id = ?", channelID, contributorID)
+	query := contributorScopedChannels(DB, contributorID).Where("id = ?", channelID)
 	if !includeKey {
 		query = query.Omit("key")
 	}
@@ -86,15 +101,18 @@ func GetContributorChannel(contributorID, channelID int, includeKey bool) (*Chan
 }
 
 func DisableContributorChannel(contributorID, channelID int) (bool, error) {
-	result := DB.Model(&Channel{}).
-		Where("id = ? AND contributor_id = ? AND status <> ?", channelID, contributorID, common.ChannelStatusManuallyDisabled).
+	result := contributorScopedChannels(DB, contributorID).
+		Where("id = ? AND status <> ?", channelID, common.ChannelStatusManuallyDisabled).
 		Update("status", common.ChannelStatusManuallyDisabled)
 	if result.Error != nil {
 		return false, result.Error
 	}
 	if result.RowsAffected == 0 {
 		var channel Channel
-		if err := DB.Select("id").Where("id = ? AND contributor_id = ?", channelID, contributorID).First(&channel).Error; err != nil {
+		if err := contributorScopedChannels(DB, contributorID).
+			Select("id").
+			Where("id = ?", channelID).
+			First(&channel).Error; err != nil {
 			return false, err
 		}
 	}
@@ -106,7 +124,7 @@ func DeleteContributorChannel(contributorID, channelID int) error {
 	if tx.Error != nil {
 		return tx.Error
 	}
-	result := tx.Where("id = ? AND contributor_id = ?", channelID, contributorID).Delete(&Channel{})
+	result := contributorScopedChannels(tx, contributorID).Where("id = ?", channelID).Delete(&Channel{})
 	if result.Error != nil {
 		tx.Rollback()
 		return result.Error

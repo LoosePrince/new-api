@@ -100,6 +100,53 @@ export async function getRequestCaptures(requestId: string) {
   return response.data
 }
 
+export type RequestCaptureExportFormat = 'ndjson' | 'rendered'
+
+/**
+ * Download captured request bodies through the authenticated API. A plain
+ * link cannot carry the dashboard access token, so the browser would hit the
+ * admin guard and report that authorization is required.
+ */
+export async function exportRequestCaptures(
+  requestId: string,
+  format: RequestCaptureExportFormat
+): Promise<Blob> {
+  const query = new URLSearchParams({ request_id: requestId, format })
+  const response = await fetch(`/api/request-captures/export?${query}`, {
+    credentials: 'include',
+    headers: await getFreshAuthHeaders(),
+  })
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null)
+    throw createServerError(body ?? { status: response.status })
+  }
+  return response.blob()
+}
+
+export type AddIPToBlacklistResult = {
+  success: boolean
+  message?: string
+  /** Stable marker when the server needs the caller to confirm blocking its own IP. */
+  code?: string
+  data?: { ip: string; already_listed: boolean }
+}
+
+/** Append a client IP recorded in a log to the inbound IP blacklist. */
+export async function addLogIPToBlacklist(
+  ip: string,
+  confirmCurrentIP = false
+): Promise<AddIPToBlacklistResult> {
+  const response = await api.post<AddIPToBlacklistResult>(
+    '/api/log/ip_blacklist',
+    { ip, confirm_current_ip: confirmCurrentIP },
+    {
+      skipErrorHandler: true,
+      validateStatus: (status) => status === 200 || status === 409,
+    }
+  )
+  return response.data
+}
+
 /**
  * Stream the logs matching params, newest first. The server sends one JSON
  * log per line and ends with an API response object; a stream that ends

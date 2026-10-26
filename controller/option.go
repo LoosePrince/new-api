@@ -404,6 +404,16 @@ func UpdateOption(c *gin.Context) {
 			common.ApiError(c, err)
 			return
 		}
+	case system_setting.IPBlacklistListOption:
+		_, invalid, parseErr := system_setting.ParseIPBlacklistJSON(option.Value.(string))
+		if parseErr != nil {
+			common.ApiErrorT(c, "IP blacklist must be a JSON array of IP addresses or CIDR ranges")
+			return
+		}
+		if len(invalid) > 0 {
+			common.ApiErrorT(c, "Invalid IP or CIDR range: {{entry}}", map[string]any{"entry": invalid[0]})
+			return
+		}
 	}
 	if model.IsPasskeyDomainOption(option.Key) {
 		change, updateErr := model.UpdatePasskeyDomainOptions(map[string]string{option.Key: option.Value.(string)}, false, "")

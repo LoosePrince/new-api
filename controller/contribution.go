@@ -12,19 +12,31 @@ import (
 	"gorm.io/gorm"
 )
 
-func requireGuestContributor(c *gin.Context) bool {
-	if !common.GetContextKeyBool(c, constant.ContextKeyIsGuest) {
-		common.ApiErrorStatus(c, http.StatusForbidden, common.NewMessage("Unauthorized, insufficient privileges"))
-		return false
+// contributorScopeID returns the contributor filter for the current request.
+// Administrators use zero, which means every contributor-owned channel.
+func contributorScopeID(c *gin.Context) int {
+	if c.GetInt("role") >= common.RoleAdminUser {
+		return 0
 	}
-	return true
+	return c.GetInt("id")
+}
+
+func requireContributorAccess(c *gin.Context) bool {
+	if c.GetInt("role") >= common.RoleAdminUser {
+		return true
+	}
+	if common.GetContextKeyBool(c, constant.ContextKeyIsGuest) {
+		return true
+	}
+	common.ApiErrorStatus(c, http.StatusForbidden, common.NewMessage("Unauthorized, insufficient privileges"))
+	return false
 }
 
 func GetContributorOverview(c *gin.Context) {
-	if !requireGuestContributor(c) {
+	if !requireContributorAccess(c) {
 		return
 	}
-	overview, err := model.GetContributorOverview(c.GetInt("id"))
+	overview, err := model.GetContributorOverview(contributorScopeID(c))
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -33,17 +45,21 @@ func GetContributorOverview(c *gin.Context) {
 }
 
 func ListContributorChannels(c *gin.Context) {
-	if !requireGuestContributor(c) {
+	if !requireContributorAccess(c) {
 		return
 	}
+	scopeID := contributorScopeID(c)
 	pageInfo := common.GetPageQuery(c)
-	channels, total, err := model.GetContributorChannels(c.GetInt("id"), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	channels, total, err := model.GetContributorChannels(scopeID, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	for _, channel := range channels {
 		clearChannelInfo(channel)
+		if scopeID == 0 {
+			annotateContributor(channel)
+		}
 	}
 	common.ApiSuccess(c, gin.H{
 		"items":     channels,
@@ -54,7 +70,7 @@ func ListContributorChannels(c *gin.Context) {
 }
 
 func GetContributorChannel(c *gin.Context) {
-	if !requireGuestContributor(c) {
+	if !requireContributorAccess(c) {
 		return
 	}
 	channelID, err := strconv.Atoi(c.Param("id"))
@@ -62,17 +78,18 @@ func GetContributorChannel(c *gin.Context) {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
-	channel, err := model.GetContributorChannel(c.GetInt("id"), channelID, false)
+	channel, err := model.GetContributorChannel(contributorScopeID(c), channelID, false)
 	if err != nil {
 		common.ApiErrorT(c, "Channel does not exist")
 		return
 	}
 	clearChannelInfo(channel)
+	annotateContributor(channel)
 	common.ApiSuccess(c, channel)
 }
 
 func FetchContributorUpstreamModels(c *gin.Context) {
-	if !requireGuestContributor(c) {
+	if !requireContributorAccess(c) {
 		return
 	}
 	channelID, err := strconv.Atoi(c.Param("id"))
@@ -80,7 +97,7 @@ func FetchContributorUpstreamModels(c *gin.Context) {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
-	channel, err := model.GetContributorChannel(c.GetInt("id"), channelID, true)
+	channel, err := model.GetContributorChannel(contributorScopeID(c), channelID, true)
 	if err != nil {
 		common.ApiErrorT(c, "Channel does not exist")
 		return
@@ -93,7 +110,7 @@ func FetchContributorUpstreamModels(c *gin.Context) {
 }
 
 func FetchContributorModels(c *gin.Context) {
-	if !requireGuestContributor(c) {
+	if !requireContributorAccess(c) {
 		return
 	}
 	var req fetchModelsRequest
@@ -106,7 +123,7 @@ func FetchContributorModels(c *gin.Context) {
 		err          error
 	)
 	if req.ChannelID > 0 {
-		savedChannel, err = model.GetContributorChannel(c.GetInt("id"), req.ChannelID, true)
+		savedChannel, err = model.GetContributorChannel(contributorScopeID(c), req.ChannelID, true)
 		if err != nil || savedChannel.Type != constant.ChannelTypeAdvancedCustom {
 			common.ApiErrorT(c, "Channel does not exist")
 			return
@@ -121,7 +138,7 @@ func FetchContributorModels(c *gin.Context) {
 }
 
 func CreateContributorChannel(c *gin.Context) {
-	if !requireGuestContributor(c) {
+	if !requireContributorAccess(c) {
 		return
 	}
 	c.Set("contributor_channel", true)
@@ -129,7 +146,7 @@ func CreateContributorChannel(c *gin.Context) {
 }
 
 func UpdateContributorChannel(c *gin.Context) {
-	if !requireGuestContributor(c) {
+	if !requireContributorAccess(c) {
 		return
 	}
 	c.Set("contributor_channel", true)
@@ -137,7 +154,7 @@ func UpdateContributorChannel(c *gin.Context) {
 }
 
 func DisableContributorChannel(c *gin.Context) {
-	if !requireGuestContributor(c) {
+	if !requireContributorAccess(c) {
 		return
 	}
 	channelID, err := strconv.Atoi(c.Param("id"))
@@ -145,7 +162,7 @@ func DisableContributorChannel(c *gin.Context) {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
-	changed, err := model.DisableContributorChannel(c.GetInt("id"), channelID)
+	changed, err := model.DisableContributorChannel(contributorScopeID(c), channelID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			common.ApiErrorT(c, "Channel does not exist")
@@ -162,7 +179,7 @@ func DisableContributorChannel(c *gin.Context) {
 }
 
 func DeleteContributorChannel(c *gin.Context) {
-	if !requireGuestContributor(c) {
+	if !requireContributorAccess(c) {
 		return
 	}
 	channelID, err := strconv.Atoi(c.Param("id"))
@@ -170,7 +187,7 @@ func DeleteContributorChannel(c *gin.Context) {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
-	if err := model.DeleteContributorChannel(c.GetInt("id"), channelID); err != nil {
+	if err := model.DeleteContributorChannel(contributorScopeID(c), channelID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			common.ApiErrorT(c, "Channel does not exist")
 			return

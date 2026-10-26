@@ -33,6 +33,7 @@ const STATUS_RELATED_KEYS = new Set([
   'Notice',
   'LogConsumeEnabled',
   'log_setting.user_export_enabled',
+  'log_setting.force_record_ip',
   'log_setting.max_range_days',
   'QuotaPerUnit',
   'USDExchangeRate',
