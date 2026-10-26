@@ -89,7 +89,9 @@ beforeEach(async () => {
           request_id: 'req-1',
           attempt: 1,
           channel_id: 1,
-          request_body: '{}',
+          request_body: '{"model":"gpt-4o-mini","stream":true}',
+          response_body:
+            '{"choices":[{"message":{"role":"assistant","content":"# Answer\\n\\n**Rendered**"}}]}',
         },
       ],
       total: 1,
@@ -229,6 +231,19 @@ describe('details dialog request record export', () => {
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(
       () => undefined
     )
+  })
+
+  it('renders request and response content as Markdown by default', async () => {
+    const user = userEvent.setup()
+    renderDialog({ isRoot: true })
+
+    expect(await screen.findByRole('heading', { name: 'Answer' })).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Raw' }))
+
+    expect(
+      screen.getByText('{"model":"gpt-4o-mini","stream":true}')
+    ).toBeVisible()
   })
 
   it('exports readable request records as a text download', async () => {

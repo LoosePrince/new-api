@@ -648,6 +648,9 @@ func StreamAllLogs(ctx context.Context, filter LogFilter, role int, fn func(*Log
 			if err := LOG_DB.WithContext(ctx).Where("request_id IN ?", requestIDs).Order("created_at asc, id asc").Find(&captures).Error; err != nil {
 				return err
 			}
+			if err := hydrateRequestCaptureBodies(captures); err != nil {
+				return err
+			}
 			for _, capture := range captures {
 				capturesByRequestID[capture.RequestId] = append(capturesByRequestID[capture.RequestId], capture)
 			}

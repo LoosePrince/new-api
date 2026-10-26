@@ -414,11 +414,20 @@ func migrateLOGDB() error {
 		}
 		return migrateClickHouseRequestCaptures()
 	}
-	return LOG_DB.AutoMigrate(&Log{}, &RequestCapture{})
+	return LOG_DB.AutoMigrate(&Log{}, &RequestCapture{}, &RequestCaptureBody{})
 }
 
 func migrateClickHouseRequestCaptures() error {
-	return LOG_DB.Exec(`CREATE TABLE IF NOT EXISTS request_captures (
+	if err := LOG_DB.Exec(`CREATE TABLE IF NOT EXISTS request_capture_bodies (
+		id Int64,
+		content_hash String,
+		created_at Int64 DEFAULT 0,
+		body String DEFAULT '',
+		truncated UInt8 DEFAULT 0
+	) ENGINE = MergeTree() ORDER BY (content_hash, id)`).Error; err != nil {
+		return err
+	}
+	if err := LOG_DB.Exec(`CREATE TABLE IF NOT EXISTS request_captures (
 		id Int64,
 		request_id String DEFAULT '',
 		upstream_request_id String DEFAULT '',
@@ -436,8 +445,17 @@ func migrateClickHouseRequestCaptures() error {
 		response_content_type String DEFAULT '',
 		request_truncated UInt8 DEFAULT 0,
 		upstream_truncated UInt8 DEFAULT 0,
-		response_truncated UInt8 DEFAULT 0
-	) ENGINE = MergeTree() PARTITION BY toYYYYMM(toDateTime(created_at)) ORDER BY (created_at, request_id, id)`).Error
+		response_truncated UInt8 DEFAULT 0,
+		request_body_id Int64 DEFAULT 0,
+		upstream_request_body_id Int64 DEFAULT 0,
+		response_body_id Int64 DEFAULT 0
+	) ENGINE = MergeTree() PARTITION BY toYYYYMM(toDateTime(created_at)) ORDER BY (created_at, request_id, id)`).Error; err != nil {
+		return err
+	}
+	return LOG_DB.Exec(`ALTER TABLE request_captures
+		ADD COLUMN IF NOT EXISTS request_body_id Int64 DEFAULT 0,
+		ADD COLUMN IF NOT EXISTS upstream_request_body_id Int64 DEFAULT 0,
+		ADD COLUMN IF NOT EXISTS response_body_id Int64 DEFAULT 0`).Error
 }
 
 func migrateClickHouseLogDB() error {

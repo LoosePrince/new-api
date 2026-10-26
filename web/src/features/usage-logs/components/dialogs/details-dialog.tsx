@@ -55,7 +55,7 @@ import {
   Info,
   LogIn,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -70,6 +70,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
+import { Markdown } from '@/components/ui/markdown'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
 import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
 import { BILLING_PRICING_VARS } from '@/features/pricing/lib/billing-expr'
@@ -109,6 +111,11 @@ import {
   renderLogContent,
 } from '../../lib/format'
 import { buildQuotaAuditOperation } from '../../lib/quota-audit-operation'
+import {
+  capturedBodyCopyText,
+  renderCapturedBody,
+  type CapturedBodyKind,
+} from '../../lib/render-capture'
 import {
   getLogTypeConfig,
   isPerCallBilling,
@@ -537,9 +544,18 @@ function CaptureBody(props: {
   label: string
   value: string
   truncated?: boolean
+  rendered: boolean
+  kind: CapturedBodyKind
 }) {
   const { t } = useTranslation()
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
+  const sections = useMemo(
+    () => (props.rendered ? renderCapturedBody(props.value, props.kind) : []),
+    [props.kind, props.rendered, props.value]
+  )
+  const displayValue = props.rendered
+    ? capturedBodyCopyText(sections)
+    : props.value
   return (
     <div className='min-w-0 space-y-1'>
       <div className='flex items-center justify-between gap-2'>
@@ -551,20 +567,43 @@ function CaptureBody(props: {
           variant='ghost'
           size='icon'
           className='size-6'
-          onClick={() => copyToClipboard(props.value)}
+          onClick={() => copyToClipboard(displayValue)}
           title={t('Copy to clipboard')}
           aria-label={t('Copy to clipboard')}
         >
-          {copiedText === props.value ? (
+          {copiedText === displayValue ? (
             <Check className='size-3 text-green-600' />
           ) : (
             <Copy className='size-3' />
           )}
         </Button>
       </div>
-      <pre className='bg-background/60 max-h-56 overflow-auto rounded border p-2 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap'>
-        {props.value}
-      </pre>
+      {props.rendered ? (
+        <div className='max-h-80 space-y-3 overflow-auto rounded border p-3'>
+          {sections.map((section) => (
+            <div
+              key={`${section.kind}:${section.role ?? ''}:${section.content}`}
+            >
+              {section.role && (
+                <div className='text-muted-foreground mb-1 text-xs font-semibold capitalize'>
+                  {section.role}
+                </div>
+              )}
+              {section.kind === 'json' ? (
+                <pre className='overflow-auto font-mono text-xs whitespace-pre-wrap'>
+                  {section.content}
+                </pre>
+              ) : (
+                <Markdown className='text-sm'>{section.content}</Markdown>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <pre className='bg-background/60 max-h-56 overflow-auto rounded border p-2 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap'>
+          {props.value}
+        </pre>
+      )}
     </div>
   )
 }
@@ -593,6 +632,9 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const [addingToBlacklist, setAddingToBlacklist] = useState(false)
   const [blacklistConfirmOpen, setBlacklistConfirmOpen] = useState(false)
   const [currentIPConfirmOpen, setCurrentIPConfirmOpen] = useState(false)
+  const [captureViewMode, setCaptureViewMode] = useState<'raw' | 'rendered'>(
+    'rendered'
+  )
 
   const handleExportCaptures = async (format: RequestCaptureExportFormat) => {
     const requestId = props.log.request_id
@@ -1000,38 +1042,57 @@ export function DetailsDialog(props: DetailsDialogProps) {
             props.log.request_id &&
             requestCaptures.length > 0 && (
               <DetailSection label={t('Request records')}>
-                <DropdownMenu modal={false}>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button
-                        variant='ghost'
-                        size='sm'
-                        className='h-6 px-1.5 text-xs'
-                        disabled={exportingFormat !== null}
-                      />
-                    }
+                <div className='flex flex-wrap items-center justify-between gap-2'>
+                  <ToggleGroup
+                    value={[captureViewMode]}
+                    onValueChange={(values) => {
+                      const value = values[0]
+                      if (value === 'raw' || value === 'rendered') {
+                        setCaptureViewMode(value)
+                      }
+                    }}
+                    variant='outline'
+                    size='sm'
+                    aria-label={t('Request records view mode')}
                   >
-                    <Download className='size-3' aria-hidden='true' />
-                    {exportingFormat
-                      ? t('Exporting...')
-                      : t('Export request records')}
-                    <ChevronDown className='size-3' aria-hidden='true' />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align='start'>
-                    <DropdownMenuItem
-                      onClick={() => void handleExportCaptures('ndjson')}
+                    <ToggleGroupItem value='raw'>{t('Raw')}</ToggleGroupItem>
+                    <ToggleGroupItem value='rendered'>
+                      {t('Readable')}
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                  <DropdownMenu modal={false}>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant='ghost'
+                          size='sm'
+                          className='h-6 px-1.5 text-xs'
+                          disabled={exportingFormat !== null}
+                        />
+                      }
                     >
                       <Download className='size-3' aria-hidden='true' />
-                      {t('Raw records (NDJSON)')}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => void handleExportCaptures('rendered')}
-                    >
-                      <FileText className='size-3' aria-hidden='true' />
-                      {t('Readable records (TXT)')}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                      {exportingFormat
+                        ? t('Exporting...')
+                        : t('Export request records')}
+                      <ChevronDown className='size-3' aria-hidden='true' />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align='start'>
+                      <DropdownMenuItem
+                        onClick={() => void handleExportCaptures('ndjson')}
+                      >
+                        <Download className='size-3' aria-hidden='true' />
+                        {t('Raw records (NDJSON)')}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => void handleExportCaptures('rendered')}
+                      >
+                        <FileText className='size-3' aria-hidden='true' />
+                        {t('Readable records (TXT)')}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
                 {requestCaptures.map((capture) => (
                   <div
                     key={capture.id}
@@ -1054,6 +1115,8 @@ export function DetailsDialog(props: DetailsDialogProps) {
                         label={t('Original request')}
                         value={capture.request_body}
                         truncated={capture.request_truncated}
+                        rendered={captureViewMode === 'rendered'}
+                        kind='request'
                       />
                     )}
                     {capture.upstream_request_body != null && (
@@ -1061,6 +1124,8 @@ export function DetailsDialog(props: DetailsDialogProps) {
                         label={t('Upstream request')}
                         value={capture.upstream_request_body}
                         truncated={capture.upstream_truncated}
+                        rendered={captureViewMode === 'rendered'}
+                        kind='request'
                       />
                     )}
                     {capture.response_body != null && (
@@ -1068,6 +1133,8 @@ export function DetailsDialog(props: DetailsDialogProps) {
                         label={t('Upstream response')}
                         value={capture.response_body}
                         truncated={capture.response_truncated}
+                        rendered={captureViewMode === 'rendered'}
+                        kind='response'
                       />
                     )}
                   </div>
