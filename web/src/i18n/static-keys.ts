@@ -906,4 +906,11 @@ export const STATIC_I18N_KEYS = [
   'Channel priorities changed. Refresh and try again.',
   'Invalid channel priority move',
   'Channel priority is outside the sortable range',
+  // Channel status grades rendered from CHANNEL_HEALTH_STATUS_META.
+  'Normal',
+  'Latency',
+  'Degraded',
+  'Abnormal',
+  'Unavailable',
+  'No traffic',
 ] as const

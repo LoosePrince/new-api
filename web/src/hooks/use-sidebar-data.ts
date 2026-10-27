@@ -154,6 +154,11 @@ export function useSidebarData(): SidebarData {
             icon: Radio,
           },
           {
+            title: t('Channel status'),
+            url: '/channels/status',
+            icon: Activity,
+          },
+          {
             title: t('Models'),
             url: '/models/metadata',
             icon: Box,

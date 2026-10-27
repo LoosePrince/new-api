@@ -243,3 +243,42 @@ describe('audit log sidebar entry', () => {
     expect(titles).toContain('Audit Logs')
   })
 })
+
+describe('channel status sidebar entry', () => {
+  it('defaults to visible right after Channels for legacy configurations', () => {
+    const { result } = sidebarFor({ admin: { enabled: true, channel: true } })
+    const items =
+      result.current.find((group) => group.id === 'admin')?.items ?? []
+    const channelIndex = items.findIndex((item) => item.title === 'Channels')
+    expect(items[channelIndex + 1]).toMatchObject({
+      title: 'Channel status',
+      url: '/channels/status',
+    })
+  })
+
+  it.each([
+    [{ admin: { enabled: true, channel_status: false } }, undefined],
+    [{ admin: { enabled: false } }, { admin: { channel_status: true } }],
+    [undefined, { admin: { enabled: true, channel_status: false } }],
+  ])(
+    'admin and user visibility rules can hide Channel status (%j, %j)',
+    (admin, user) => {
+      const { result } = sidebarFor(admin, user)
+      expect(
+        result.current
+          .flatMap((group) => group.items)
+          .some((item) => item.title === 'Channel status')
+      ).toBe(false)
+    }
+  )
+
+  it('does not mark Channels active on the status page', () => {
+    const { result } = sidebarFor()
+    const items =
+      result.current.find((group) => group.id === 'admin')?.items ?? []
+    const selected = items.filter((item) =>
+      checkIsActive('/channels/status', item)
+    )
+    expect(selected.map((item) => item.title)).toEqual(['Channel status'])
+  })
+})

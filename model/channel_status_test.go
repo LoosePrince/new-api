@@ -51,6 +51,43 @@ func TestUpdateChannelStatusPersistsMultiKeyState(t *testing.T) {
 	assert.Equal(t, 1, stored.ChannelInfo.MultiKeyPollingIndex)
 }
 
+func TestUpdateModelsOnlyTouchesModelsAndAbilities(t *testing.T) {
+	setupChannelStatusTest(t)
+
+	channel := Channel{
+		Name:      "model-toggle",
+		Key:       "secret-key",
+		Status:    common.ChannelStatusEnabled,
+		Models:    "gpt-4o,gpt-4o-mini",
+		Group:     "default",
+		UsedQuota: 42,
+	}
+	require.NoError(t, DB.Create(&channel).Error)
+	require.NoError(t, channel.UpdateAbilities(nil))
+
+	// Simulate a concurrent edit to another field after the page was loaded.
+	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", channel.Id).Updates(map[string]any{
+		"key":        "rotated-key",
+		"used_quota": gorm.Expr("used_quota + ?", 8),
+	}).Error)
+
+	stale, err := GetChannelById(channel.Id, true)
+	require.NoError(t, err)
+	stale.Models = "gpt-4o"
+	require.NoError(t, stale.UpdateModels())
+
+	var stored Channel
+	require.NoError(t, DB.First(&stored, channel.Id).Error)
+	assert.Equal(t, "gpt-4o", stored.Models)
+	assert.Equal(t, "rotated-key", stored.Key, "other columns keep the concurrent edit")
+	assert.Equal(t, int64(50), stored.UsedQuota)
+
+	var abilities []Ability
+	require.NoError(t, DB.Where("channel_id = ?", channel.Id).Find(&abilities).Error)
+	require.Len(t, abilities, 1)
+	assert.Equal(t, "gpt-4o", abilities[0].Model)
+}
+
 func TestSaveStatusStateFromSingleKeySnapshotPreservesUnownedColumns(t *testing.T) {
 	setupChannelStatusTest(t)
 

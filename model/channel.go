@@ -707,6 +707,18 @@ func (channel *Channel) Update() error {
 	return err
 }
 
+// UpdateModels persists only the model list of the channel and refreshes the
+// abilities derived from it. Callers that already hold a full channel (e.g. the
+// status page) use this instead of Update so concurrent edits to other fields
+// are not overwritten with a stale copy.
+func (channel *Channel) UpdateModels() error {
+	err := DB.Model(channel).Select("models").Updates(Channel{Models: channel.Models}).Error
+	if err != nil {
+		return err
+	}
+	return channel.UpdateAbilities(nil)
+}
+
 func (channel *Channel) UpdateResponseTime(responseTime int64) {
 	err := DB.Model(channel).Select("response_time", "test_time").Updates(Channel{
 		TestTime:     common.GetTimestamp(),

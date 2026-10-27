@@ -82,6 +82,68 @@ type Log struct {
 	RequestCaptures   []*RequestCapture `json:"request_captures,omitempty" gorm:"-"`
 }
 
+type ChannelStatusMetric struct {
+	ChannelID    int    `json:"channel_id"`
+	ModelName    string `json:"model_name"`
+	Day          int64  `json:"day"`
+	Type         int    `json:"type"`
+	Count        int64  `json:"count"`
+	UseTime      int64  `json:"use_time"`
+	LastActivity int64  `json:"last_activity"`
+}
+
+func GetChannelStatusMetrics(startTimestamp int64, endTimestamp int64) ([]ChannelStatusMetric, error) {
+	var metrics []ChannelStatusMetric
+	dayExpression := "created_at - (created_at % 86400)"
+	err := LOG_DB.Model(&Log{}).
+		Select("channel_id, model_name, "+dayExpression+" as day, type, count(*) as count, COALESCE(sum(use_time), 0) as use_time, max(created_at) as last_activity").
+		Where("created_at >= ? AND created_at <= ? AND type IN ? AND channel_id > 0", startTimestamp, endTimestamp, []int{LogTypeConsume, LogTypeError}).
+		Group("channel_id, model_name, " + dayExpression + ", type").
+		Find(&metrics).Error
+	return metrics, err
+}
+
+// GetHistoricalChannelModels lists the models that produced logs on the given
+// channels since startTimestamp. The window matches the status page history so
+// a model shown as removed can always be restored.
+func GetHistoricalChannelModels(channelIDs []int, startTimestamp int64) (map[int]map[string]struct{}, error) {
+	modelsByChannel := make(map[int]map[string]struct{})
+	if len(channelIDs) == 0 {
+		return modelsByChannel, nil
+	}
+
+	var rows []struct {
+		ChannelID int    `gorm:"column:channel_id"`
+		ModelName string `gorm:"column:model_name"`
+	}
+	err := LOG_DB.Model(&Log{}).
+		Select("channel_id, model_name").
+		Where("channel_id IN ? AND model_name <> '' AND created_at >= ?", channelIDs, startTimestamp).
+		Distinct().
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		if modelsByChannel[row.ChannelID] == nil {
+			modelsByChannel[row.ChannelID] = make(map[string]struct{})
+		}
+		modelsByChannel[row.ChannelID][row.ModelName] = struct{}{}
+	}
+	return modelsByChannel, nil
+}
+
+// HasHistoricalChannelModel reports whether the channel produced any log for
+// the model since startTimestamp, which is the precondition for restoring a
+// removed model from the channel status page.
+func HasHistoricalChannelModel(channelID int, modelName string, startTimestamp int64) (bool, error) {
+	var count int64
+	err := LOG_DB.Model(&Log{}).
+		Where("channel_id = ? AND model_name = ? AND created_at >= ?", channelID, modelName, startTimestamp).
+		Count(&count).Error
+	return count > 0, err
+}
+
 // don't use iota, avoid change log type value
 const (
 	LogTypeUnknown = 0
