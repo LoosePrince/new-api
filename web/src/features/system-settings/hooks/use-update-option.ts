@@ -58,6 +58,17 @@ const STATUS_RELATED_KEYS = new Set([
   'GroupPolicies',
 ])
 
+// Published status settings also change the `/api/public/channel-status` payload
+// the status page and the home page bar read, so those caches must be dropped as
+// well; otherwise the previous layout lingers until the next refetch interval.
+const PUBLIC_STATUS_OPTION_KEYS = new Set([
+  'PublicChannelStatusEnabled',
+  'PublicChannelStatusHomeMode',
+  'PublicChannelStatusChannelMode',
+  'PublicChannelStatusChannelIDs',
+  'PublicChannelStatusModelEnabled',
+])
+
 export function useUpdateOption() {
   const queryClient = useQueryClient()
 
@@ -77,6 +88,12 @@ export function useUpdateOption() {
           } catch {
             /* empty */
           }
+        }
+
+        if (PUBLIC_STATUS_OPTION_KEYS.has(variables.key)) {
+          queryClient.invalidateQueries({
+            queryKey: ['public-channel-status'],
+          })
         }
 
         toast.success(i18next.t('Setting updated successfully'))

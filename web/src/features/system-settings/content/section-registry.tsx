@@ -61,6 +61,13 @@ const CONTENT_SECTIONS = [
       <PublicHomeSection
         defaultValues={{
           PublicStatsEnabled: settings.PublicStatsEnabled,
+          PublicChannelStatusEnabled: settings.PublicChannelStatusEnabled,
+          PublicChannelStatusHomeMode: settings.PublicChannelStatusHomeMode,
+          PublicChannelStatusChannelMode:
+            settings.PublicChannelStatusChannelMode,
+          PublicChannelStatusChannelIDs: settings.PublicChannelStatusChannelIDs,
+          PublicChannelStatusModelEnabled:
+            settings.PublicChannelStatusModelEnabled,
           PublicChatEnabled: settings.PublicChatEnabled,
           PublicChatGroup: settings.PublicChatGroup,
           PublicChatRoutingMode: settings.PublicChatRoutingMode,

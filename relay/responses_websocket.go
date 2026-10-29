@@ -334,7 +334,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				}
 			}
 			info.RetryIndex = retry.GetRetry()
-			policy.BeginAttempt(channel, info.UsingGroup)
+			policy.BeginAttempt(channel, info.UsingGroup, info.GetAttemptModelName())
 			var payload []byte
 			payload, apiErr = buildResponsesWSCreatePayload(c, info, create.Request, create.Generate, create.StreamID)
 			if apiErr != nil {
@@ -626,7 +626,7 @@ func (s *responsesWSSession) restoreConnectionContext(c *gin.Context, model stri
 	common.SetContextKey(c, appconstant.ContextKeyChannelModelMapping, channel.GetModelMapping())
 	common.SetContextKey(c, appconstant.ContextKeyChannelStatusCodeMapping, channel.GetStatusCodeMapping())
 	policy := service.RequestPolicy(c)
-	policy.BeginAttempt(channel, s.lockedGroup)
+	policy.BeginAttempt(channel, s.lockedGroup, model)
 	policy.AddEvent(service.PolicyEvent{ChannelID: channel.Id, Decision: service.PolicyDecision{Action: "select", Reason: "pinned_channel", Source: "channel_constraint"}})
 	return nil
 }

@@ -197,9 +197,12 @@ export type ConsumptionDistributionChartType = 'bar' | 'area'
 
 export type ModelAnalyticsChartTab = 'trend' | 'proportion' | 'top'
 
+export type TokenAnalyticsChartTab = 'trend' | 'proportion' | 'top'
+
 export interface DashboardChartPreferences {
   consumptionDistributionChart: ConsumptionDistributionChartType
   modelAnalyticsChart: ModelAnalyticsChartTab
+  tokenAnalyticsChart: TokenAnalyticsChartTab
   defaultTimeRangeDays: number
   defaultTimeGranularity: TimeGranularity
 }
@@ -244,8 +247,12 @@ export interface ProcessedChartData {
   spec_area: VChartSpec
   spec_model_line: VChartSpec
   spec_rank_bar: VChartSpec
+  spec_token_pie: VChartSpec
+  spec_token_line: VChartSpec
+  spec_token_rank_bar: VChartSpec
   totalQuotaDisplay: string
   totalCountDisplay: string
+  totalTokensDisplay: string
 }
 
 export interface ProcessedUserChartData {

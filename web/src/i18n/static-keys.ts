@@ -913,4 +913,13 @@ export const STATIC_I18N_KEYS = [
   'Abnormal',
   'Unavailable',
   'No traffic',
+  // Public service status layout options rendered from HOME_MODE_OPTIONS and
+  // CHANNEL_MODE_OPTIONS.
+  'Compact site bar with the status page',
+  'Compact site bar without the status page',
+  'Detailed overview with the status page',
+  'Detailed overview without the status page',
+  'Show every channel',
+  'Hide channel details',
+  'Show the selected channels',
 ] as const

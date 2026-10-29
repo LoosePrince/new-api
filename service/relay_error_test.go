@@ -242,7 +242,7 @@ func TestRequestPolicyEventsReachLogAdminInfo(t *testing.T) {
 	c.Set("auto_ban", true)
 	c.Set("channel_id", 7)
 	state := RequestPolicy(c)
-	state.BeginAttempt(&model.Channel{Id: 7}, "default")
+	state.BeginAttempt(&model.Channel{Id: 7}, "default", "gpt-4o")
 	apiErr := types.NewOpenAIError(errors.New("invalid credential"), types.ErrorCodeBadResponseStatusCode, http.StatusUnauthorized)
 	RecordPolicyFailure(c, 7, apiErr, DecideRelayRetry(c, apiErr, 0))
 
@@ -261,7 +261,7 @@ func TestRequestPolicyEventsReachLogAdminInfo(t *testing.T) {
 	RecordPolicyFailure(c, 7, apiErr, DecideRelayRetry(c, apiErr, 0))
 	assert.Equal(t, "key_disable_requested", state.Events()[4].Health)
 
-	state.BeginAttempt(&model.Channel{Id: 8}, "default")
+	state.BeginAttempt(&model.Channel{Id: 8}, "default", "gpt-4o")
 	c.Set("channel_id", 8)
 	MarkRequestPolicySuccess(c, nil)
 	MarkRequestPolicySuccess(c, nil)

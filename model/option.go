@@ -84,6 +84,17 @@ func InitOptionMap() {
 	common.OptionMap["HomePageContent"] = ""
 	publicHomeSettings := setting.GetPublicHomeSettings()
 	common.OptionMap[setting.PublicStatsEnabledOption] = strconv.FormatBool(publicHomeSettings.StatsEnabled)
+	common.OptionMap[setting.PublicChannelStatusEnabledOption] = strconv.FormatBool(publicHomeSettings.ChannelStatusEnabled)
+	common.OptionMap[setting.PublicChannelStatusHomeModeOption] = publicHomeSettings.ChannelStatusHomeMode
+	common.OptionMap[setting.PublicChannelStatusChannelModeOption] = publicHomeSettings.ChannelStatusChannelMode
+	channelStatusChannelIDs := "[]"
+	if len(publicHomeSettings.ChannelStatusChannelIDs) > 0 {
+		if encoded, err := common.Marshal(publicHomeSettings.ChannelStatusChannelIDs); err == nil {
+			channelStatusChannelIDs = string(encoded)
+		}
+	}
+	common.OptionMap[setting.PublicChannelStatusChannelIDsOption] = channelStatusChannelIDs
+	common.OptionMap[setting.PublicChannelStatusModelEnabledOption] = strconv.FormatBool(publicHomeSettings.ChannelStatusModelsEnabled)
 	common.OptionMap[setting.PublicChatEnabledOption] = strconv.FormatBool(publicHomeSettings.ChatEnabled)
 	common.OptionMap[setting.PublicChatGroupOption] = publicHomeSettings.ChatGroup
 	common.OptionMap[setting.PublicChatRoutingModeOption] = publicHomeSettings.ChatRoutingMode

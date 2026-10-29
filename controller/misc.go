@@ -120,6 +120,11 @@ func GetStatus(c *gin.Context) {
 		"public_api_allow_no_model":     publicApiPolicy.AllowNoModel,
 		"public_api_has_fallback":       publicApiHasFallback,
 		"public_stats_enabled":          publicHome.StatsEnabled,
+		"public_channel_status_enabled": publicHome.ChannelStatusEnabled,
+		// The status route stays reachable only while the published home mode
+		// keeps the dedicated page, so the guard can decide without a second
+		// request.
+		"public_channel_status_page_enabled": publicHome.ChannelStatusPageEnabled(),
 
 		"password_login_encryption_enabled": common.PasswordLoginEncryptionEnabled,
 

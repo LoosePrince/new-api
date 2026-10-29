@@ -27,6 +27,9 @@ const (
 	// and the restore action never disagree about what counts as history.
 	channelStatusHistoryDays = 30
 	channelStatusDaySeconds  = 86400
+	channelStatusHourSeconds = 3600
+	// channelStatusHoursPerDay caps the hourly cells of the current day.
+	channelStatusHoursPerDay = 24
 )
 
 type channelStatusDay struct {

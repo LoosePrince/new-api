@@ -91,6 +91,12 @@ const LazyModelCharts = lazy(() =>
   }))
 )
 
+const LazyTokenUsageCharts = lazy(() =>
+  import('./components/models/token-usage-charts').then((m) => ({
+    default: m.TokenUsageCharts,
+  }))
+)
+
 const LazyConsumptionDistributionChart = lazy(() =>
   import('./components/models/consumption-distribution-chart').then((m) => ({
     default: m.ConsumptionDistributionChart,
@@ -388,6 +394,18 @@ export function Dashboard() {
                     data={modelData}
                     loading={dataLoading}
                     defaultChartTab={chartPreferences.modelAnalyticsChart}
+                    timeGranularity={
+                      modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
+                    }
+                  />
+                </Suspense>
+              </FadeIn>
+              <FadeIn delay={0.2}>
+                <Suspense fallback={<ModelChartsFallback />}>
+                  <LazyTokenUsageCharts
+                    data={modelData}
+                    loading={dataLoading}
+                    defaultChartTab={chartPreferences.tokenAnalyticsChart}
                     timeGranularity={
                       modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
                     }

@@ -3,6 +3,8 @@ package model
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -92,15 +94,269 @@ type ChannelStatusMetric struct {
 	LastActivity int64  `json:"last_activity"`
 }
 
+// channelStatusRetryMarker matches the retry decision a request policy record
+// writes when the request moves to another channel or fallback model. Requests
+// that never retried need no per-attempt replay, so this substring keeps the
+// periodic status query from parsing every row of the window.
+const channelStatusRetryMarker = `%"action":"retry"%`
+
+// channelStatusDaySeconds is the width of the daily bucket the status page
+// reports. It matches the aggregation expression used by the grouped query.
+const channelStatusDaySeconds = 86400
+
+// channelStatusHourSeconds is the width of the hourly bucket used for the
+// current day, where a 30-day history alone would hide the last few hours.
+const channelStatusHourSeconds = 3600
+
+// channelStatusPolicyRecord is the subset of a log's `other` JSON that carries
+// the per-attempt routing record.
+type channelStatusPolicyRecord struct {
+	AdminInfo struct {
+		RequestPolicy []struct {
+			Attempt      int    `json:"attempt"`
+			ChannelID    int    `json:"channel_id"`
+			AttemptModel string `json:"attempt_model"`
+			ElapsedMS    int64  `json:"elapsed_ms"`
+			Decision     struct {
+				Action string `json:"action"`
+			} `json:"decision"`
+		} `json:"request_policy"`
+	} `json:"admin_info"`
+}
+
+// channelStatusAttempt is one upstream attempt of a request that retried: the
+// channel and model that actually ran, that attempt's own outcome and elapsed
+// time, and the log row the record was read from.
+type channelStatusAttempt struct {
+	ChannelID int
+	ModelName string
+	// Success stays nil when the record never stated the attempt's outcome, so
+	// the caller can fall back to the log row the attempt belongs to.
+	Success  *bool
+	UseTime  int64
+	LoggedAt int64
+}
+
+// parseChannelStatusAttempts replays the request policy events of one log row
+// into its ordered attempts. A fallback request stores its whole attempt chain
+// on the row, so the row's single model/type pair only describes the final
+// outcome and cannot be used for channel or model statistics.
+func parseChannelStatusAttempts(log *Log) []channelStatusAttempt {
+	if log == nil || log.Other == "" {
+		return nil
+	}
+	var record channelStatusPolicyRecord
+	if err := common.UnmarshalJsonStr(log.Other, &record); err != nil {
+		return nil
+	}
+	events := record.AdminInfo.RequestPolicy
+	if len(events) == 0 {
+		return nil
+	}
+
+	type attemptState struct {
+		startElapsedMS int64
+		channelID      int
+		modelName      string
+		// useTime is set by the attempt's terminal event; zero means the record
+		// never stated how long the attempt took.
+		useTime int64
+		success *bool
+	}
+	states := make(map[int]*attemptState, 4)
+	order := make([]int, 0, 4)
+	for _, event := range events {
+		state := states[event.Attempt]
+		if state == nil {
+			state = &attemptState{}
+			states[event.Attempt] = state
+			order = append(order, event.Attempt)
+		}
+		switch event.Decision.Action {
+		case "attempt":
+			// BeginAttempt opens the window the attempt's elapsed time is
+			// measured against.
+			state.startElapsedMS = event.ElapsedMS
+			state.channelID = event.ChannelID
+			state.modelName = event.AttemptModel
+		case "failure", "success":
+			if event.ChannelID != 0 {
+				state.channelID = event.ChannelID
+			}
+			if event.AttemptModel != "" {
+				state.modelName = event.AttemptModel
+			}
+			success := event.Decision.Action == "success"
+			state.success = &success
+			state.useTime = max(event.ElapsedMS-state.startElapsedMS, 0) / 1000
+		}
+	}
+
+	slices.Sort(order)
+	attempts := make([]channelStatusAttempt, 0, len(order))
+	for _, index := range order {
+		state := states[index]
+		attempts = append(attempts, channelStatusAttempt{
+			ChannelID: state.channelID,
+			ModelName: state.modelName,
+			Success:   state.success,
+			UseTime:   state.useTime,
+			LoggedAt:  log.CreatedAt,
+		})
+	}
+	return attempts
+}
+
+// GetChannelStatusMetrics aggregates the request logs of the monitored window
+// into channel+model+day buckets. Requests that retried are replayed attempt by
+// attempt, so a fallback success is credited to the model that answered with the
+// latency of that attempt, while every failed attempt counts against its own
+// channel and model.
 func GetChannelStatusMetrics(startTimestamp int64, endTimestamp int64) ([]ChannelStatusMetric, error) {
+	return getChannelStatusBucketedMetrics(startTimestamp, endTimestamp, channelStatusDaySeconds)
+}
+
+// GetChannelStatusHourlyMetrics aggregates a short window into channel+model
+// hourly buckets. The public status strip reports the current day hour by hour,
+// where a daily bucket would hide the last few hours of traffic.
+func GetChannelStatusHourlyMetrics(startTimestamp int64, endTimestamp int64) ([]ChannelStatusMetric, error) {
+	return getChannelStatusBucketedMetrics(startTimestamp, endTimestamp, channelStatusHourSeconds)
+}
+
+// getChannelStatusBucketedMetrics aggregates the attempts of the window into
+// buckets of bucketSeconds, replaying every request that retried.
+func getChannelStatusBucketedMetrics(startTimestamp int64, endTimestamp int64, bucketSeconds int64) ([]ChannelStatusMetric, error) {
+	metrics, err := getChannelStatusGroupedMetrics(startTimestamp, endTimestamp, bucketSeconds)
+	if err != nil {
+		return nil, err
+	}
+	retryLogs, err := getChannelStatusRetryLogs(startTimestamp, endTimestamp)
+	if err != nil {
+		return nil, err
+	}
+	if len(retryLogs) == 0 {
+		return metrics, nil
+	}
+
+	merged := make(map[ChannelStatusMetric]ChannelStatusMetric, len(metrics)+len(retryLogs))
+	add := func(metric ChannelStatusMetric) {
+		current, exists := merged[metric]
+		if !exists {
+			merged[metric] = metric
+			return
+		}
+		current.Count += metric.Count
+		current.UseTime += metric.UseTime
+		current.LastActivity = max(current.LastActivity, metric.LastActivity)
+		merged[metric] = current
+	}
+	for _, metric := range metrics {
+		add(metric)
+	}
+
+	// A request writes one log row per attempt, and every row carries the whole
+	// attempt chain accumulated so far. Later rows are therefore the more
+	// complete view of the same attempts, so they replace earlier ones.
+	attemptsByRequest := make(map[string]map[int]channelStatusAttempt, 16)
+	requestOrder := make([]string, 0, 16)
+	for _, log := range retryLogs {
+		requestKey := log.RequestId
+		if requestKey == "" {
+			requestKey = fmt.Sprintf("log:%d", log.Id)
+		}
+		if attemptsByRequest[requestKey] == nil {
+			attemptsByRequest[requestKey] = make(map[int]channelStatusAttempt, 4)
+			requestOrder = append(requestOrder, requestKey)
+		}
+		parsed := parseChannelStatusAttempts(log)
+		if len(parsed) == 0 {
+			// A row whose routing record cannot be read keeps its own single
+			// outcome instead of dropping out of the status page.
+			add(ChannelStatusMetric{
+				ChannelID:    log.ChannelId,
+				ModelName:    log.ModelName,
+				Day:          log.CreatedAt - log.CreatedAt%bucketSeconds,
+				Type:         log.Type,
+				Count:        1,
+				UseTime:      int64(log.UseTime),
+				LastActivity: log.CreatedAt,
+			})
+			continue
+		}
+		// The row's own type is the outcome of its last attempt, which is the
+		// only attempt a row can describe more reliably than the events do.
+		if last := &parsed[len(parsed)-1]; last.Success == nil {
+			success := log.Type == LogTypeConsume
+			last.Success = &success
+			last.UseTime = int64(log.UseTime)
+		}
+		for index, attempt := range parsed {
+			attemptsByRequest[requestKey][index] = attempt
+		}
+	}
+
+	for _, requestKey := range requestOrder {
+		attempts := attemptsByRequest[requestKey]
+		indexes := make([]int, 0, len(attempts))
+		for index := range attempts {
+			indexes = append(indexes, index)
+		}
+		slices.Sort(indexes)
+		for _, index := range indexes {
+			attempt := attempts[index]
+			// An attempt without a channel or model never reached an upstream,
+			// so there is nothing to attribute it to.
+			if attempt.ChannelID <= 0 || attempt.ModelName == "" || attempt.Success == nil {
+				continue
+			}
+			metricType := LogTypeError
+			if *attempt.Success {
+				metricType = LogTypeConsume
+			}
+			add(ChannelStatusMetric{
+				ChannelID:    attempt.ChannelID,
+				ModelName:    attempt.ModelName,
+				Day:          attempt.LoggedAt - attempt.LoggedAt%bucketSeconds,
+				Type:         metricType,
+				Count:        1,
+				UseTime:      attempt.UseTime,
+				LastActivity: attempt.LoggedAt,
+			})
+		}
+	}
+
+	result := make([]ChannelStatusMetric, 0, len(merged))
+	for _, metric := range merged {
+		result = append(result, metric)
+	}
+	return result, nil
+}
+
+// getChannelStatusGroupedMetrics aggregates the rows of requests that never
+// retried, which one row per request already describes exactly.
+func getChannelStatusGroupedMetrics(startTimestamp int64, endTimestamp int64, bucketSeconds int64) ([]ChannelStatusMetric, error) {
 	var metrics []ChannelStatusMetric
-	dayExpression := "created_at - (created_at % 86400)"
+	bucketExpression := "created_at - (created_at % " + strconv.FormatInt(bucketSeconds, 10) + ")"
 	err := LOG_DB.Model(&Log{}).
-		Select("channel_id, model_name, "+dayExpression+" as day, type, count(*) as count, COALESCE(sum(use_time), 0) as use_time, max(created_at) as last_activity").
-		Where("created_at >= ? AND created_at <= ? AND type IN ? AND channel_id > 0", startTimestamp, endTimestamp, []int{LogTypeConsume, LogTypeError}).
-		Group("channel_id, model_name, " + dayExpression + ", type").
+		Select("channel_id, model_name, "+bucketExpression+" as day, type, count(*) as count, COALESCE(sum(use_time), 0) as use_time, max(created_at) as last_activity").
+		Where("created_at >= ? AND created_at <= ? AND type IN ? AND channel_id > 0 AND (other IS NULL OR other NOT LIKE ?)",
+			startTimestamp, endTimestamp, []int{LogTypeConsume, LogTypeError}, channelStatusRetryMarker).
+		Group("channel_id, model_name, " + bucketExpression + ", type").
 		Find(&metrics).Error
 	return metrics, err
+}
+
+// getChannelStatusRetryLogs loads the rows of requests that retried, oldest
+// first so their attempt chains can be merged in order.
+func getChannelStatusRetryLogs(startTimestamp int64, endTimestamp int64) ([]*Log, error) {
+	var logs []*Log
+	err := LOG_DB.Model(&Log{}).
+		Select("id, request_id, type, channel_id, model_name, use_time, created_at, other").
+		Where("created_at >= ? AND created_at <= ? AND type IN ? AND channel_id > 0 AND other LIKE ?",
+			startTimestamp, endTimestamp, []int{LogTypeConsume, LogTypeError}, channelStatusRetryMarker).
+		Order("created_at asc, id asc").
+		Find(&logs).Error
+	return logs, err
 }
 
 // GetHistoricalChannelModels lists the models that produced logs on the given

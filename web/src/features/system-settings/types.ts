@@ -219,6 +219,15 @@ export type ContentSettings = {
   DataExportDefaultTime: string
   DataExportInterval: number
   PublicStatsEnabled: boolean
+  PublicChannelStatusEnabled: boolean
+  PublicChannelStatusHomeMode:
+    | 'coarse'
+    | 'coarse_no_page'
+    | 'detailed'
+    | 'detailed_no_page'
+  PublicChannelStatusChannelMode: 'all' | 'none' | 'selected'
+  PublicChannelStatusChannelIDs: string
+  PublicChannelStatusModelEnabled: boolean
   PublicChatEnabled: boolean
   PublicChatGroup: string
   PublicChatRoutingMode: 'group' | 'model'

@@ -13,15 +13,19 @@ GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { Activity, CheckCircle2, Hash, Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { usePublicServiceStatus } from '@/features/public-status/hooks/use-public-service-status'
 import { toIntlLocale } from '@/i18n/languages'
 import { formatCompactNumber, formatNumber } from '@/lib/format'
 
 import { getPublicRuntimeStats } from '../../api'
+import { ServiceStatusBar } from './service-status-bar'
 
 export function RuntimeStats() {
   const { i18n, t } = useTranslation()
@@ -32,9 +36,14 @@ export function RuntimeStats() {
     refetchInterval: 60_000,
     meta: { errorToast: false },
   })
+  // The site status is an independent switch, so this section stays on the page
+  // when only the service status is published.
+  const serviceStatus = usePublicServiceStatus()
 
   const stats = data?.data
-  if (!isPending && !stats?.enabled) return null
+  const showStats = isPending || stats?.enabled === true
+  const showServiceStatus = serviceStatus.isPending || serviceStatus.enabled
+  if (!showStats && !showServiceStatus) return null
 
   const items = [
     {
@@ -74,35 +83,40 @@ export function RuntimeStats() {
             {t('Updated automatically')}
           </span>
         </div>
-        <div className='border-border/50 bg-muted/10 grid overflow-hidden rounded-xl border md:grid-cols-3'>
-          {items.map((item) => {
-            const Icon = item.icon
-            return (
-              <div
-                key={item.label}
-                className='border-border/50 flex min-h-32 flex-col justify-between border-b p-6 last:border-b-0 md:border-r md:border-b-0 md:last:border-r-0'
-              >
-                <Icon
-                  className='text-muted-foreground size-5'
-                  aria-hidden='true'
-                />
-                <div>
-                  <div className='text-3xl font-semibold tracking-tight tabular-nums'>
-                    {item.value}
+        {showStats && (
+          <>
+            <div className='border-border/50 bg-muted/10 grid overflow-hidden rounded-xl border md:grid-cols-3'>
+              {items.map((item) => {
+                const Icon = item.icon
+                return (
+                  <div
+                    key={item.label}
+                    className='border-border/50 flex min-h-32 flex-col justify-between border-b p-6 last:border-b-0 md:border-r md:border-b-0 md:last:border-r-0'
+                  >
+                    <Icon
+                      className='text-muted-foreground size-5'
+                      aria-hidden='true'
+                    />
+                    <div>
+                      <div className='text-3xl font-semibold tracking-tight tabular-nums'>
+                        {item.value}
+                      </div>
+                      <div className='text-muted-foreground mt-1 text-sm'>
+                        {item.label}
+                      </div>
+                    </div>
                   </div>
-                  <div className='text-muted-foreground mt-1 text-sm'>
-                    {item.label}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-        <p className='text-muted-foreground mt-4 text-xs leading-5'>
-          {t(
-            'Success rate counts a request once and considers it successful when the final fallback attempt succeeds.'
-          )}
-        </p>
+                )
+              })}
+            </div>
+            <p className='text-muted-foreground mt-4 text-xs leading-5'>
+              {t(
+                'Success rate counts a request once and considers it successful when the final fallback attempt succeeds.'
+              )}
+            </p>
+          </>
+        )}
+        <ServiceStatusBar />
       </div>
     </section>
   )

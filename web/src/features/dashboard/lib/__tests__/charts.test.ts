@@ -105,6 +105,69 @@ function unorderedUsage(start: string, interval: number): QuotaDataItem[] {
   ]
 }
 
+describe('dashboard token charts', () => {
+  const rows: QuotaDataItem[] = [
+    {
+      created_at: new Date('2025-12-31T20:10:00').getTime() / 1000,
+      model_name: 'model-a',
+      token_used: 100,
+      count: 1,
+      quota: 1000,
+    },
+    {
+      created_at: new Date('2025-12-31T20:40:00').getTime() / 1000,
+      model_name: 'model-a',
+      token_used: 50,
+      count: 2,
+      quota: 500,
+    },
+    {
+      created_at: new Date('2025-12-31T21:05:00').getTime() / 1000,
+      model_name: 'model-b',
+      token_used: 300,
+      count: 1,
+      quota: 2000,
+    },
+  ]
+
+  test('aggregates token consumption per model', () => {
+    const result = processChartData(rows, 'hour')
+
+    expect(result.totalTokensDisplay).toBe('450')
+    expect(result.spec_token_pie.data[0].values).toEqual([
+      { type: 'model-b', value: 300 },
+      { type: 'model-a', value: 150 },
+    ])
+    expect(result.spec_token_rank_bar.data[0].values).toEqual([
+      { Model: 'model-b', Tokens: 300 },
+      { Model: 'model-a', Tokens: 150 },
+    ])
+  })
+
+  test('charts token usage by model over time', () => {
+    const result = processChartData(rows, 'hour')
+    const values: Array<{ Time: string; Model: string; Tokens: number }> =
+      result.spec_token_line.data[0].values
+    const tokenTotals = new Map<string, number>()
+    for (const row of values) {
+      tokenTotals.set(row.Model, (tokenTotals.get(row.Model) ?? 0) + row.Tokens)
+    }
+
+    expect(tokenTotals.get('model-a')).toBe(150)
+    expect(tokenTotals.get('model-b')).toBe(300)
+    expect(values).toHaveLength(14)
+  })
+
+  test('renders an empty token chart without data', () => {
+    const result = processChartData([], 'hour')
+
+    expect(result.totalTokensDisplay).toBe('0')
+    expect(result.spec_token_pie.data[0].values).toEqual([])
+    expect(result.spec_token_line.data[0].values).toEqual([])
+    expect(result.spec_token_rank_bar.data[0].values).toEqual([])
+  })
+})
+
 describe.each(cases)('dashboard $granularity chart chronology', (scenario) => {
   test('orders model buckets across New Year while aggregating repeated labels', () => {
     const data = unorderedUsage(scenario.start, scenario.interval)

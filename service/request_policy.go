@@ -23,26 +23,33 @@ type PolicyDecision struct {
 }
 
 type PolicyEvent struct {
-	Attempt     int            `json:"attempt"`
-	ChannelID   int            `json:"channel_id,omitempty"`
-	Group       string         `json:"group,omitempty"`
-	Rule        string         `json:"rule,omitempty"`
-	Status      int            `json:"status,omitempty"`
-	ErrorCode   string         `json:"error_code,omitempty"`
-	ErrorSource string         `json:"error_source,omitempty"`
-	ElapsedMS   int64          `json:"elapsed_ms"`
-	Decision    PolicyDecision `json:"decision"`
-	Health      string         `json:"health,omitempty"`
+	Attempt   int `json:"attempt"`
+	ChannelID int `json:"channel_id,omitempty"`
+	// AttemptModel is the model name this attempt was sent upstream with. It is
+	// kept per attempt so channel and model statistics can attribute a fallback
+	// to the model that actually ran instead of the client's requested model.
+	AttemptModel string         `json:"attempt_model,omitempty"`
+	Group        string         `json:"group,omitempty"`
+	Rule         string         `json:"rule,omitempty"`
+	Status       int            `json:"status,omitempty"`
+	ErrorCode    string         `json:"error_code,omitempty"`
+	ErrorSource  string         `json:"error_source,omitempty"`
+	ElapsedMS    int64          `json:"elapsed_ms"`
+	Decision     PolicyDecision `json:"decision"`
+	Health       string         `json:"health,omitempty"`
 }
 
 // RequestPolicyState records how one request was routed so administrators can
-// read the decision flow in the log details. Channel selection and the retry
-// decision stay in the relay flows; this state only records them.
+// read the decision flow in the log details, and so channel/model statistics can
+// attribute every fallback attempt to the model that actually ran. Channel
+// selection and the retry decision stay in the relay flows; this state only
+// records them.
 type RequestPolicyState struct {
 	FinalLogged       bool
 	StartedAt         time.Time
 	Attempts          int
 	SelectedGroup     string
+	AttemptModelName  string
 	SessionMode       string
 	SessionModeSource string
 	RuleName          string
@@ -73,6 +80,9 @@ func (s *RequestPolicyState) AddEvent(event PolicyEvent) {
 	if event.Rule == "" {
 		event.Rule = s.RuleName
 	}
+	if event.AttemptModel == "" {
+		event.AttemptModel = s.AttemptModelName
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.events) < 512 {
@@ -86,11 +96,15 @@ func (s *RequestPolicyState) Events() []PolicyEvent {
 	return slices.Clone(s.events)
 }
 
-func (s *RequestPolicyState) BeginAttempt(channel *model.Channel, group string) {
+// BeginAttempt opens the next attempt. attemptModel is the model this attempt
+// sends upstream, which differs from the requested model once a group fallback
+// switched models.
+func (s *RequestPolicyState) BeginAttempt(channel *model.Channel, group string, attemptModel string) {
 	s.Attempts++
 	s.Successful = false
 	s.OutcomeRecorded = false
 	s.SelectedGroup = group
+	s.AttemptModelName = attemptModel
 	s.AddEvent(PolicyEvent{ChannelID: channel.Id, Decision: PolicyDecision{Action: "attempt", Reason: "channel_selected", Source: "routing"}})
 }
 

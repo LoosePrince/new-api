@@ -21,6 +21,7 @@ import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import * as z from 'zod'
 
+import { MultiSelect } from '@/components/multi-select'
 import { Combobox } from '@/components/ui/combobox'
 import {
   Form,
@@ -40,6 +41,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { getChannels } from '@/features/channels/api'
 import { getModels } from '@/features/models/api'
 import { requireServerSuccess } from '@/lib/server-error-message'
 
@@ -55,6 +57,16 @@ import { safeNumberFieldProps } from '../utils/numeric-field'
 
 const publicHomeSchema = z.object({
   PublicStatsEnabled: z.boolean(),
+  PublicChannelStatusEnabled: z.boolean(),
+  PublicChannelStatusHomeMode: z.enum([
+    'coarse',
+    'coarse_no_page',
+    'detailed',
+    'detailed_no_page',
+  ]),
+  PublicChannelStatusChannelMode: z.enum(['all', 'none', 'selected']),
+  PublicChannelStatusChannelIDs: z.string(),
+  PublicChannelStatusModelEnabled: z.boolean(),
   PublicChatEnabled: z.boolean(),
   PublicChatGroup: z.string().max(100),
   PublicChatRoutingMode: z.enum(['group', 'model']),
@@ -74,6 +86,25 @@ type PublicHomeFormValues = z.infer<typeof publicHomeSchema>
 type PublicHomeSectionProps = {
   defaultValues: PublicHomeFormValues
 }
+
+const HOME_MODE_OPTIONS = [
+  { value: 'coarse', label: 'Compact site bar with the status page' },
+  {
+    value: 'coarse_no_page',
+    label: 'Compact site bar without the status page',
+  },
+  { value: 'detailed', label: 'Detailed overview with the status page' },
+  {
+    value: 'detailed_no_page',
+    label: 'Detailed overview without the status page',
+  },
+] as const
+
+const CHANNEL_MODE_OPTIONS = [
+  { value: 'all', label: 'Show every channel' },
+  { value: 'none', label: 'Hide channel details' },
+  { value: 'selected', label: 'Show the selected channels' },
+] as const
 
 const adjustmentFields = [
   {
@@ -102,6 +133,13 @@ export function PublicHomeSection(props: PublicHomeSectionProps) {
     queryFn: async () =>
       requireServerSuccess(
         await getModels({ include_channel_models: true, p: 1, page_size: 100 })
+      ),
+  })
+  const channelQuery = useQuery({
+    queryKey: ['public-home-status-channels'],
+    queryFn: async () =>
+      requireServerSuccess(
+        await getChannels({ p: 1, page_size: 1000, id_sort: true })
       ),
   })
   const form = useForm<PublicHomeFormValues>({
@@ -153,6 +191,9 @@ export function PublicHomeSection(props: PublicHomeSectionProps) {
   }
 
   const statsEnabled = form.watch('PublicStatsEnabled')
+  const channelStatusEnabled = form.watch('PublicChannelStatusEnabled')
+  const channelMode = form.watch('PublicChannelStatusChannelMode')
+  const selectedChannelIDs = form.watch('PublicChannelStatusChannelIDs')
   const chatEnabled = form.watch('PublicChatEnabled')
   const selectedGroup = form.watch('PublicChatGroup')
   const routingMode = form.watch('PublicChatRoutingMode')
@@ -176,6 +217,28 @@ export function PublicHomeSection(props: PublicHomeSectionProps) {
         .sort(),
     [modelQuery.data, selectedGroup]
   )
+  const channelOptions = useMemo(
+    () =>
+      (channelQuery.data?.data?.items ?? [])
+        .map((channel) => ({
+          value: String(channel.id),
+          label: channel.name
+            ? `${channel.name} (#${channel.id})`
+            : `#${channel.id}`,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [channelQuery.data]
+  )
+  // The option stores a JSON array so an empty selection and "no channel" stay
+  // distinguishable from a list of one.
+  const selectedChannelValues = useMemo(() => {
+    try {
+      const parsed = JSON.parse(selectedChannelIDs || '[]')
+      return Array.isArray(parsed) ? parsed.map((id) => String(id)) : []
+    } catch {
+      return []
+    }
+  }, [selectedChannelIDs])
 
   useEffect(() => {
     if (
@@ -211,6 +274,151 @@ export function PublicHomeSection(props: PublicHomeSectionProps) {
                   <Switch
                     checked={field.value}
                     onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </SettingsSwitchItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name='PublicChannelStatusEnabled'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>{t('Enable public service status')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Publish the read-only site status under the public runtime data. The options below decide how much of it is shown.'
+                    )}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </SettingsSwitchItem>
+            )}
+          />
+          <div className='grid gap-6 sm:grid-cols-2'>
+            <FormField
+              control={form.control}
+              name='PublicChannelStatusHomeMode'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Home page service status detail')}</FormLabel>
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    disabled={!channelStatusEnabled}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {HOME_MODE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {t(option.label)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    {t(
+                      'A compact bar shows only the whole-site status; the detailed overview repeats the status page card. Both come with or without the dedicated page.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='PublicChannelStatusChannelMode'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    {t('Channel details on the status page')}
+                  </FormLabel>
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    disabled={!channelStatusEnabled}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {CHANNEL_MODE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {t(option.label)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    {t(
+                      'Hiding channel details removes channel names only; the site and model figures keep counting every attempt.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          {channelMode === 'selected' && (
+            <FormField
+              control={form.control}
+              name='PublicChannelStatusChannelIDs'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Published channels')}</FormLabel>
+                  <FormControl>
+                    <MultiSelect
+                      options={channelOptions}
+                      selected={selectedChannelValues}
+                      onChange={(values) =>
+                        field.onChange(JSON.stringify(values.map(Number)))
+                      }
+                      placeholder={t('Select channels')}
+                      emptyText={t('No matching channels')}
+                      disabled={!channelStatusEnabled || channelQuery.isPending}
+                      maxVisibleChips={20}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Only the selected channels are named on the status page. Disabled channels are never listed.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+          <FormField
+            control={form.control}
+            name='PublicChannelStatusModelEnabled'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>{t('Show model status')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Publish the per-model availability section of the status page.'
+                    )}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    disabled={!channelStatusEnabled}
                   />
                 </FormControl>
               </SettingsSwitchItem>

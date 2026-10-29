@@ -874,6 +874,19 @@ func (info *RelayInfo) GetBillingModelName() string {
 	return info.OriginModelName
 }
 
+// GetAttemptModelName returns the model the current upstream attempt runs with:
+// the fallback model once a group fallback switched models, otherwise the model
+// the client requested.
+func (info *RelayInfo) GetAttemptModelName() string {
+	if info == nil {
+		return ""
+	}
+	if info.AttemptModelName != "" {
+		return info.AttemptModelName
+	}
+	return info.OriginModelName
+}
+
 func (info *RelayInfo) GetUpstreamModelName() string {
 	if info == nil || info.ChannelMeta == nil {
 		return ""
