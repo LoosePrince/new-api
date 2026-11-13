@@ -124,6 +124,8 @@ const OPERATIONS_SECTIONS = [
             settings['log_setting.request_capture_max_body_kb'] ?? 256,
           'log_setting.request_capture_retention_days':
             settings['log_setting.request_capture_retention_days'] ?? 30,
+          'system_task_setting.retention_days':
+            settings['system_task_setting.retention_days'] ?? 30,
         }}
       />
     ),

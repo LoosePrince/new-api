@@ -46,6 +46,7 @@ import {
   Route,
   Settings2,
   AlertTriangle,
+  Workflow,
   Headphones,
   Monitor,
   Cloud,
@@ -71,6 +72,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
 import { Markdown } from '@/components/ui/markdown'
+import {
+  RequestPluginAdminSteps,
+  RequestPluginRecord,
+} from '../request-plugin-record'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
 import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
@@ -1038,6 +1043,12 @@ export function DetailsDialog(props: DetailsDialogProps) {
             </DetailSection>
           ) : null}
 
+        {props.isAdmin && adminInfo?.request_plugins?.length ? (
+          <DetailSection label={t('Request processing steps')}>
+            <RequestPluginAdminSteps steps={adminInfo.request_plugins} />
+          </DetailSection>
+        ) : null}
+
           {props.isAdmin &&
             props.log.request_id &&
             requestCaptures.length > 0 && (
@@ -1654,6 +1665,19 @@ export function DetailsDialog(props: DetailsDialogProps) {
               )}
             </DetailSection>
           )}
+
+        {other?.request_plugins?.length ? (
+          <DetailSection
+            icon={<Workflow className='size-3.5' aria-hidden='true' />}
+            iconTone='chart-3'
+            label={t('Request processing')}
+          >
+            <RequestPluginRecord
+              items={other.request_plugins}
+              loadIcons={props.isRoot}
+            />
+          </DetailSection>
+        ) : null}
 
           {/* Param override */}
           {other?.po && Array.isArray(other.po) && other.po.length > 0 && (

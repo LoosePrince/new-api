@@ -63,6 +63,9 @@ const logSettingsSchema = z.object({
     request_capture_max_body_kb: z.number().int().min(1),
     request_capture_retention_days: z.number().int().min(1),
   }),
+  system_task_setting: z.object({
+    retention_days: z.number().int().min(1),
+  }),
 })
 
 type LogSettingsFormValues = z.infer<typeof logSettingsSchema>
@@ -80,6 +83,7 @@ type LogSettingsSectionProps = {
     'log_setting.request_cache_enabled': boolean
     'log_setting.request_capture_max_body_kb': number
     'log_setting.request_capture_retention_days': number
+    'system_task_setting.retention_days': number
   }
 }
 
@@ -88,6 +92,7 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
   const updateOption = useUpdateOption()
   const recordingTitleId = useId()
   const searchTitleId = useId()
+  const taskHistoryTitleId = useId()
   const formDefaults = useMemo<LogSettingsFormValues>(
     () => ({
       LogConsumeEnabled: props.defaultValues.LogConsumeEnabled,
@@ -110,6 +115,10 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
           props.defaultValues['log_setting.request_capture_max_body_kb'],
         request_capture_retention_days:
           props.defaultValues['log_setting.request_capture_retention_days'],
+      },
+      system_task_setting: {
+        retention_days:
+          props.defaultValues['system_task_setting.retention_days'],
       },
     }),
     [props.defaultValues]
@@ -155,7 +164,10 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
       ],
       [
         'log_setting.request_capture_retention_days',
-        values.log_setting.request_capture_retention_days,
+        values.log_setting.request_capture_retention_days,,
+      ],
+        'system_task_setting.retention_days',
+        values.system_task_setting.retention_days,,
       ],
     ] as const
     for (const [key, value] of changes) {
@@ -393,6 +405,44 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
                     <FormDescription>
                       {t(
                         'The longest time range a user can view at once in the logs and on the dashboard, and the longest range any export can cover.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </SettingsFormGrid>
+          </div>
+
+          <Separator />
+
+          <div
+            role='group'
+            aria-labelledby={taskHistoryTitleId}
+            className='flex min-w-0 flex-col gap-4'
+          >
+            <h4 id={taskHistoryTitleId} className='font-medium'>
+              {t('System task records')}
+            </h4>
+            <SettingsFormGrid>
+              <FormField
+                control={form.control}
+                name='system_task_setting.retention_days'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Keep finished tasks for (days)')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min={1}
+                        step={1}
+                        placeholder='30'
+                        {...safeNumberFieldProps(field)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Finished system tasks older than this are deleted automatically every day.'
                       )}
                     </FormDescription>
                     <FormMessage />
