@@ -164,10 +164,11 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
       ],
       [
         'log_setting.request_capture_retention_days',
-        values.log_setting.request_capture_retention_days,,
+        values.log_setting.request_capture_retention_days,
       ],
+      [
         'system_task_setting.retention_days',
-        values.system_task_setting.retention_days,,
+        values.system_task_setting.retention_days,
       ],
     ] as const
     for (const [key, value] of changes) {
