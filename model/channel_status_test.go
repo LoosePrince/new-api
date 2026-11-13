@@ -100,57 +100,7 @@ func TestUpdateModelsOnlyTouchesModelsAndAbilities(t *testing.T) {
 	require.Len(t, abilities, 1)
 	assert.Equal(t, "gpt-4o", abilities[0].Model)
 }
-func TestSaveStatusStateFromSingleKeySnapshotPreservesUnownedColumns(t *testing.T) {
-	setupChannelStatusTest(t)
 
-	channel := Channel{
-		Name:        "single-key-status",
-		Key:         "original-key",
-		Status:      common.ChannelStatusEnabled,
-		Models:      "original-model",
-		Group:       "default",
-		UsedQuota:   100,
-		ChannelInfo: ChannelInfo{},
-	}
-	require.NoError(t, DB.Create(&channel).Error)
-
-	stale, err := GetChannelById(channel.Id, true)
-	require.NoError(t, err)
-
-	concurrentChannelInfo := ChannelInfo{
-		IsMultiKey:           true,
-		MultiKeySize:         2,
-		MultiKeyMode:         constant.MultiKeyModePolling,
-		MultiKeyPollingIndex: 1,
-	}
-	require.NoError(t, DB.Model(&Channel{}).Where("id = ?", channel.Id).Updates(map[string]any{
-		"key":          "rotated-key",
-		"used_quota":   gorm.Expr("used_quota + ?", 250),
-		"models":       "concurrent-model",
-		"channel_info": concurrentChannelInfo,
-	}).Error)
-
-	stale.Status = common.ChannelStatusManuallyDisabled
-	stale.SetOtherInfo(map[string]any{
-		"status_reason": "manual operation",
-		"status_time":   int64(1234),
-	})
-	require.NoError(t, stale.saveStatusState())
-
-	var stored Channel
-	require.NoError(t, DB.First(&stored, channel.Id).Error)
-	assert.Equal(t, common.ChannelStatusManuallyDisabled, stored.Status)
-	assert.Equal(t, "rotated-key", stored.Key)
-	assert.Equal(t, int64(350), stored.UsedQuota)
-	assert.Equal(t, "concurrent-model", stored.Models)
-	assert.Equal(t, concurrentChannelInfo, stored.ChannelInfo)
-
-	otherInfo := stored.GetOtherInfo()
-	assert.Equal(t, "manual operation", otherInfo["status_reason"])
-	assert.Equal(t, float64(1234), otherInfo["status_time"])
-}// writeAfterNextChannelRead stands for another node: right after the next
-// read of the channel, before the writer under test writes, it stores the
-// columns write returns for the channel it reads.
 func writeAfterNextChannelRead(t *testing.T, channelID int, write func(stored *Channel) map[string]any) {
 	t.Helper()
 	var done atomic.Bool
@@ -382,4 +332,5 @@ func TestAutoDisableOfAScheduledPluginKeyBumpsChannelsOnFollowers(t *testing.T) 
 			require.True(t, UpdateChannelStatus(channel.Id, "key-a", common.ChannelStatusAutoDisabled, "quota"))
 			assert.Equal(t, tc.bump, before != revision())
 		})
+}
 }

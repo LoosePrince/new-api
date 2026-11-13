@@ -1804,6 +1804,8 @@ func fetchModelsResponse(c *gin.Context, channel *model.Channel) {
 		"message": "",
 		"data":    models,
 	})
+}
+
 // checkPluginChannelKeys runs the checkKey of a task plugin channel's plugin
 // on the key lines an administrator typed in: those of key that storedKey
 // does not hold.

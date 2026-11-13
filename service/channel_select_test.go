@@ -193,11 +193,14 @@ func TestOrderGroupFallbackModels(t *testing.T) {
 	randomized := orderGroupFallbackModels(models, "missing", "random")
 	assert.ElementsMatch(t, models, randomized)
 }
+
 func TestModelNameDistance(t *testing.T) {
 	assert.Equal(t, 0, modelNameDistance("model", "model"))
 	assert.Equal(t, 1, modelNameDistance("model", "models"))
 	assert.Equal(t, 3, modelNameDistance("kitten", "sitting"))
-}func TestSharedNativeRouteIdentityFilterContainsAllCandidateKeys(t *testing.T) {
+}
+
+func TestSharedNativeRouteIdentityFilterContainsAllCandidateKeys(t *testing.T) {
 	registry := jsplugin.NewRegistry()
 	for _, key := range []string{"route-alpha", "route-beta"} {
 		_, err := registry.Register(fmt.Sprintf(`
@@ -221,5 +224,4 @@ export function parseTaskResult() { return {}; }
 	require.Len(t, filters, 1)
 	assert.Equal(t, "route-alpha", filters[0].TaskPluginKey)
 	assert.Equal(t, []string{"route-alpha", "route-beta"}, filters[0].TaskPluginKeys)
-}
 }

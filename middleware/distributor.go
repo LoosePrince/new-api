@@ -24,7 +24,6 @@ import (
 
 	"github.com/MoeForge/moego/ojson"
 	"github.com/gin-gonic/gin"
-	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
 
@@ -387,62 +386,6 @@ func applyResolvedModelToRequest(c *gin.Context, modelName string) error {
 	c.Set(common.KeyBodyStorage, newStorage)
 	c.Request.Body = io.NopCloser(newStorage)
 	return nil
-}
-
-func countTopLevelJSONKey(data []byte, target string) int {
-	depth := 0
-	inString := false
-	escaped := false
-	stringStart := 0
-	expectingKey := false
-	count := 0
-	for index, current := range data {
-		if inString {
-			if escaped {
-				escaped = false
-				continue
-			}
-			if current == '\\' {
-				c.escaped = true
-				continue
-			}
-			if current != '"' {
-				continue
-			}
-			c.inString = false
-			if c.isKey {
-				var key string
-				if c.keyLen <= len(c.key) && common.Unmarshal(c.key[:c.keyLen], &key) == nil && key == "model" {
-					c.count++
-				}
-				c.expectingKey = false
-				c.isKey = false
-			}
-			continue
-		}
-		switch current {
-		case '"':
-			c.inString = true
-			c.isKey = c.rootObject && c.depth == 1 && c.expectingKey
-			if c.isKey {
-				c.key[0], c.keyLen = '"', 1
-			}
-		case '{':
-			c.depth++
-			if c.depth == 1 {
-				c.rootObject, c.expectingKey = true, true
-			}
-		case '[':
-			c.depth++
-		case '}', ']':
-			c.depth--
-		case ',':
-			if c.depth == 1 {
-				c.expectingKey = true
-			}
-		}
-	}
-	return len(data), nil
 }
 
 // jsonModelKeyCounter counts top-level model keys while JSON validation reads
